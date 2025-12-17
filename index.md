@@ -14,3 +14,4 @@
 | 25         | Transform Even/Odd          | Done        |
 | 26         | Transform Parity (Practice) | In Progress |
 | 27         | std::equal vs std::mismatch | In Progress |
+| 28         | Ranges: Generate & Shuffle  | In Progress |
