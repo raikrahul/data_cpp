@@ -223,3 +223,56 @@ Extra penalty: 4-8 cycles per split (L1) or 50+ cycles (L2 miss)
 ---
 
 ## FILL IN ALL BLANKS BEFORE RUNNING CODE
+
+---
+
+## Error Report: SIMD Puzzle Session Mistakes
+
+### ERROR 1: Register Width Calculation
+- **Line:** L27, L37-40
+- **Wrong:** 256 bits = 16 bytes, 16/8 = 2 doubles
+- **Correct:** 256 bits = 32 bytes, 32/8 = 4 doubles
+- **Why sloppy:** Did not compute 256 ÷ 8, guessed 16
+- **Missed:** 256 ÷ 8 = 32, not 16
+- **Prevention:** Write calculation: 256 ÷ 8 = ___ before typing answer
+
+### ERROR 2: Float/Int Capacity First Attempt
+- **Line:** L27
+- **Wrong:** 4 floats, 4 ints
+- **Correct:** 8 floats, 8 ints (32 bytes ÷ 4 bytes)
+- **Why sloppy:** Used wrong base (16 bytes instead of 32)
+- **Missed:** 32 ÷ 4 = 8, not 4
+- **Prevention:** Start from correct byte count (32), then divide
+
+### ERROR 3: Instruction Per Element Calculation
+- **Line:** L87
+- **Wrong:** 7 / 4 = 2 instr/elem
+- **Correct:** 7 / 4 = 1.75 instr/elem
+- **Why sloppy:** Rounded to integer without thinking
+- **Missed:** 7 ÷ 4 = 1.75, not 2
+- **Prevention:** Use calculator or write: 7.0 / 4.0 = 1.75
+
+### ERROR 4: Assembly Instruction Meaning
+- **Line:** Verbal
+- **Wrong:** "movsd = move short decimal"
+- **Correct:** movsd = Move Scalar Double-precision
+- **Why sloppy:** Guessed from letters instead of looking up
+- **Missed:** s = scalar, d = double, not "short decimal"
+- **Prevention:** Decompose instruction: prefix + operation + size + type
+
+---
+
+### Pattern: Root Causes
+
+1. **Bit vs Byte confusion** → 256 bits ≠ 256 bytes
+2. **Integer rounding** → 7/4 = 1.75, not 2
+3. **Guessing acronyms** → movsd ≠ "move short decimal"
+4. **Cascade errors** → Wrong byte count → wrong element count
+
+### Fix Protocol
+
+1. WRITE bit-to-byte conversion: bits ÷ 8 = bytes
+2. USE decimal division for instruction ratios
+3. DECOMPOSE instruction names systematically
+4. VERIFY base value before computing derived values
+

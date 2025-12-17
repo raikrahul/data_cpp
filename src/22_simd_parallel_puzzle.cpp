@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <iostream>
 #include <vector>
 #ifdef HAS_TBB
@@ -24,9 +25,9 @@
 // │  └────┴────┴────┴────┴────┴────┴────┴────┘                              │
 // │  Total: 256 bits = 32 bytes                                             │
 // │                                                                          │
-// │  TODO: How many floats fit? ___                                         │
-// │  TODO: How many ints fit? ___                                           │
-// │  TODO: How many chars fit? ___                                          │
+// │  TODO: How many floats fit? _4__                                         │
+// │  TODO: How many ints fit? ___4                                           │
+// │  TODO: How many chars fit? ___32                                          │
 // └─────────────────────────────────────────────────────────────────────────┘
 
 void puzzle1_register_capacity() {
@@ -35,10 +36,10 @@ void puzzle1_register_capacity() {
     std::cout << "sizeof(float) = " << sizeof(float) << " bytes\n";
     std::cout << "sizeof(int) = " << sizeof(int) << " bytes\n";
 
-    // TODO: 256 bits = ___ bytes
-    // TODO: ___ bytes / 8 = ___ doubles
-    // TODO: ___ bytes / 4 = ___ floats
-    // TODO: ___ bytes / 4 = ___ ints
+    // TODO: 256 bits = __32_ bytes
+    // TODO: __32_ bytes / 8 = __4_ doubles
+    // TODO: __32_ bytes / 4 = __8_ floats
+    // TODO: __32_ bytes / 4 = __8_ ints
 
     // FILL IN YOUR PREDICTIONS BEFORE UNCOMMENTING:
     // std::cout << "Doubles per ymm: " << 256/8/8 << "\n";
@@ -61,7 +62,7 @@ void puzzle1_register_capacity() {
 // │    add rbx, 8                                                            │
 // │    cmp rax, rdx                                                          │
 // │    jne .L3                                                               │
-// │  Total: 7 instructions / 1 element = 7 instr/elem                       │
+// │  Total: 7  instructions / 1 element = ___ instr/elem                       │
 // │                                                                          │
 // │  SIMD (4 elements/iteration):                                           │
 // │  .L3:                                                                    │
@@ -84,7 +85,7 @@ void puzzle2_speedup_calculation() {
 
     // TODO: Predict speedup BEFORE measuring
     // Scalar: 7 instructions per element
-    // SIMD: 7 instructions per 4 elements = ___ per element
+    // SIMD: 7 instructions per 4 elements = _2__ per element
     // Theoretical speedup: ___x
 
     auto start = std::chrono::high_resolution_clock::now();
@@ -99,33 +100,48 @@ void puzzle2_speedup_calculation() {
 }
 
 // ============================================================================
-// PUZZLE 3: Memory Bandwidth Crossover
-// ============================================================================
 //
 // ┌─────────────────────────────────────────────────────────────────────────┐
-// │  L1 Cache: 32 KB capacity, ~64 bytes/cycle bandwidth                    │
-// │  L2 Cache: 256 KB capacity, ~40 bytes/cycle bandwidth                   │
+// │  YOUR MACHINE: AMD Ryzen 5 4600H                                        │
+// │  L1d cache: 32 KB per core (192 KB total / 6 cores)                     │
+// │  L2 cache: 512 KB per core (3 MB total / 6 cores)                       │
+// │  L3 cache: 4 MB per CCX (8 MB total / 2 CCX)                            │
+// │                                                                          │
 // │  SIMD demand: 32 bytes load + 32 bytes store = 64 bytes/iteration      │
 // │                                                                          │
-// │  N = 1000 doubles (8 KB) → Fits in L1 → Full speed                     │
-// │  N = 10000 doubles (80 KB) → Spills to L2 → ___% efficiency            │
-// │  N = 100000 doubles (800 KB) → Spills to L3 → ___% efficiency          │
+// │  N = 1000 → data = 1000 × 8 × 2 = 16 KB → fits in L1d (32 KB) ✓        │
+// │  N = 4000 → data = 4000 × 8 × 2 = 64 KB → exceeds L1d, hits L2 (512 KB)│
+// │  N = 30000 → data = 30000 × 8 × 2 = 480 KB → still in L2 ✓            │
+// │  N = 100000 → data = 100000 × 8 × 2 = 1.6 MB → exceeds L2, hits L3    │
+// │  N = 1000000 → data = 1000000 × 8 × 2 = 16 MB → exceeds L3, hits RAM  │
 // └─────────────────────────────────────────────────────────────────────────┘
 
 void puzzle3_memory_crossover() {
-    // Test different sizes
-    for (size_t N : {1000UL, 10000UL, 100000UL, 1000000UL}) {
+    // Test different sizes around cache boundaries
+    // L1d = 32KB → N = 2000 (16KB data)
+    // L2 = 512KB → N = 32000 (512KB data)
+    // L3 = 4MB → N = 250000 (4MB data)
+    for (size_t N : {500UL, 1000UL, 2000UL, 4000UL, 8000UL, 16000UL, 32000UL, 64000UL, 128000UL,
+                     256000UL, 512000UL, 1000000UL}) {
         std::vector<double> v(N, 2.0);
         std::vector<double> w(N);
 
+        // Warm up cache
+        std::transform(v.begin(), v.end(), w.begin(),
+                       [](double x) { return std::sqrt(x) + std::sin(x); });
+
         auto start = std::chrono::high_resolution_clock::now();
-        std::transform(v.begin(), v.end(), w.begin(), [](double x) { return x * 2.0; });
+        std::transform(v.begin(), v.end(), w.begin(),
+                       [](double x) { return std::sqrt(x) + std::sin(x); });
         auto end = std::chrono::high_resolution_clock::now();
 
         auto us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        if (us == 0) us = 1;  // Avoid division by zero
         double throughput = static_cast<double>(N) / static_cast<double>(us);
+        size_t data_kb = N * 8 * 2 / 1024;
 
-        std::cout << "N=" << N << ": " << us << " µs, " << throughput << " M elems/s\n";
+        std::cout << "N=" << N << " (" << data_kb << "KB): " << us << " µs, " << throughput
+                  << " M elems/s\n";
     }
 
     // TODO: At which N does throughput drop significantly?
