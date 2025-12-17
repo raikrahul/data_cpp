@@ -9,3 +9,5 @@
 | 20         | STL Algorithms Worksheet    | In Progress |
 | 21         | std::for_each Deep Dive     | In Progress |
 | 22         | SIMD & Parallel Execution   | In Progress |
+| 23         | Lambda Anatomy              | Done        |
+| 24         | std::reduce & std::transform| Done        |
