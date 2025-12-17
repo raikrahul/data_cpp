@@ -276,3 +276,56 @@ Extra penalty: 4-8 cycles per split (L1) or 50+ cycles (L2 miss)
 3. DECOMPOSE instruction names systematically
 4. VERIFY base value before computing derived values
 
+
+---
+
+## Error Report: sbrk/malloc Session Mistakes
+
+### ERROR 1: Size Header Overwrite
+- **Line:** L10-11 (original)
+- **Wrong:** Store size at ptr1, then for-loop writes ptr1[0..99]
+- **Correct:** Store size, then ptr1 += 8, then write user data
+- **Why sloppy:** Did not trace memory layout step by step
+- **Missed:** ptr1[0] overlaps with *(size_t*)ptr1
+- **Prevention:** Draw memory boxes: [header][user data], mark boundaries
+
+### ERROR 2: Missing Pad Storage for Free
+- **Line:** L10
+- **Wrong:** *(size_t*)ptr1 = 100 (stores only user size)
+- **Correct:** Need to store pad OR store total allocation size
+- **Why sloppy:** Focused on alloc, forgot free needs reverse info
+- **Missed:** At free time, pad value is lost (calculated at alloc time)
+- **Prevention:** Ask "what info does free() need?" before designing header
+
+### ERROR 3: Confusion About sbrk Return Value
+- **Line:** Verbal
+- **Wrong:** Thought sbrk "returns then allocates"
+- **Correct:** sbrk saves old, extends heap, returns old (order matters)
+- **Why sloppy:** Did not read source code
+- **Missed:** Function stores oldbrk BEFORE calling __brk()
+- **Prevention:** Read implementation: glibc-2.39/misc/sbrk.c lines 65-77
+
+### ERROR 4: Alignment Math Direction
+- **Line:** Verbal
+- **Wrong:** Confused ceil vs floor for alignment
+- **Correct:** Alloc uses ceil (round up), free uses floor (round down)
+- **Why sloppy:** Did not write formula before calculating
+- **Missed:** ceil = (addr + 7) & ~7, floor = addr & ~7
+- **Prevention:** Write alignment formula, test with example addresses
+
+---
+
+### Pattern: Root Causes
+
+1. **No memory diagram** → overlapping writes
+2. **Forward-only thinking** → forgot reverse operation (free) needs info
+3. **Not reading source** → invented wrong execution order
+4. **Formula skipped** → confused ceil/floor alignment
+
+### Fix Protocol
+
+1. DRAW memory layout before writing any code
+2. DESIGN header by asking "what does free() need?"
+3. READ source code for system calls
+4. WRITE formula before calculating alignments
+
