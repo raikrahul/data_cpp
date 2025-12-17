@@ -25,11 +25,11 @@ int main() {
     // 2. Calculate the iterators for each step.
     // 3. Identify the EXACT return address.
     //
-    // Iter 0: Addr 0x2000 | Val 5 | Match? ___
-    // Iter 1: Addr 0x2004 | Val 8 | Match? ___
-    // Iter 2: Addr 0x2008 | Val 2 | Match? ___ -> BREAK
+    // Iter 0: Addr 0x2000 | Val 5 | Match? NO
+    // Iter 1: Addr 0x2004 | Val 8 | Match? NO
+    // Iter 2: Addr 0x2008 | Val 2 | Match? YES -> BREAK
 
-    // auto it = std::ranges::find(...);
+    auto it = std::ranges::find(w, 2);
 
     // ════════════════════════════════════════════════════════════════════════
     // TODO BLOCK 2: Iterator to Index (std::ranges::distance)
@@ -39,7 +39,7 @@ int main() {
     // 2. Manually calculate the pointer arithmetic: (0x2008 - 0x2000) / 4.
     // 3. Confirm result is 2, NOT 4.
 
-    // long index = ...
+    long index = std::ranges::distance(w.begin(), it);
 
     // ════════════════════════════════════════════════════════════════════════
     // TODO BLOCK 3: Ranges Equal (Reduction)
@@ -49,8 +49,9 @@ int main() {
     // 2. Define x = {5, 8, 2} (Prefix).
     // 3. Check equality.
 
-    // std::vector<int> v = ...
-    // bool eq = ...
+    std::vector<int> v = {5, 8, 2, 9, 2, 7};
+    std::vector<int> x = {5, 8, 2};
+    std::cout << "v == x? " << std::boolalpha << std::ranges::equal(v, x) << "\n";
 
     // ════════════════════════════════════════════════════════════════════════
     // VERIFICATION
@@ -58,7 +59,7 @@ int main() {
 
     std::cout << "w = {5, 8, 2, 9, 2, 7}\n";
     std::cout << "Expected Find Result: Index 2 (Address 0x2008)\n";
-    // std::cout << "Computed Index: " << index << "\n";
+    std::cout << "Computed Index: " << index << "\n";
 
     return 0;
 }

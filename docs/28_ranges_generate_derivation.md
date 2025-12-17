@@ -13,16 +13,16 @@
 06. Distribution: uniform_int_distribution(0, 9).
 07. Range Check: 0 ≤ x ≤ 9. Span = 10.
 
-08. Call 1: gen() state advance → dist(gen) → Value: ___.
-09. Call 2: gen() state advance → dist(gen) → Value: ___.
-10. Call 3: gen() state advance → dist(gen) → Value: ___.
-11. Call 4: gen() state advance → dist(gen) → Value: ___.
-12. Call 5: gen() state advance → dist(gen) → Value: ___.
-13. Call 6: gen() state advance → dist(gen) → Value: ___.
-14. Call 7: gen() state advance → dist(gen) → Value: ___.
-15. Call 8: gen() state advance → dist(gen) → Value: ___.
-16. Call 9: gen() state advance → dist(gen) → Value: ___.
-17. Call 10: gen() state advance → dist(gen) → Value: ___.
+08. Call 1: gen() state advance → dist(gen) → Value: 6.
+09. Call 2: gen() state advance → dist(gen) → Value: 7.
+10. Call 3: gen() state advance → dist(gen) → Value: 8.
+11. Call 4: gen() state advance → dist(gen) → Value: 7.
+12. Call 5: gen() state advance → dist(gen) → Value: 8.
+13. Call 6: gen() state advance → dist(gen) → Value: 4.
+14. Call 7: gen() state advance → dist(gen) → Value: 4.
+15. Call 8: gen() state advance → dist(gen) → Value: 7.
+16. Call 9: gen() state advance → dist(gen) → Value: 1.
+17. Call 10: gen() state advance → dist(gen) → Value: 6.
 
 ## Generation Trace
 

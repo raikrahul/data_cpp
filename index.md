@@ -16,3 +16,4 @@
 | 27         | std::equal vs std::mismatch | In Progress |
 | 28         | Ranges: Generate & Shuffle  | In Progress |
 | 29         | Ranges: Find & Equal        | In Progress |
+| 30         | Vector vs Ranges Fill       | In Progress |

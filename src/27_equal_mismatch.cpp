@@ -53,9 +53,7 @@ int main() {
     // ════════════════════════════════════════════════════════════════════════
 
     // 1. Write std::equal call.
-    // 2. Syntax: std::equal(v1.begin(), v1.end(), v2.begin());
-
-    // bool result = ...
+    bool result = std::equal(v1.begin(), v1.end(), v2.begin());
 
     // ════════════════════════════════════════════════════════════════════════
     // VERIFICATION
@@ -65,7 +63,7 @@ int main() {
     std::cout << "v2 = {1, 2, 3, 99, 5}\n";
 
     // Uncomment when implemented:
-    // std::cout << "Equal? " << (result ? "YES" : "NO") << "\n";
+    std::cout << "Equal? " << (result ? "YES" : "NO") << "\n";
     std::cout << "Expected: NO\n";
 
     return 0;
