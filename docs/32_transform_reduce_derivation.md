@@ -92,3 +92,35 @@ F3. **Variance Precision:**
 2. `int` → `double` is widening but brace-init rejects implicit conversions.
 3. Compiler error message contained exact fix: "insert explicit cast".
 4. Time wasted asking AI > time reading error message.
+
+---
+
+## SESSION 2 REPORT
+
+### TODO Block 3: ranges::transform (Squaring)
+
+| Field | Value |
+|-------|-------|
+| Code | `ranges::transform(w, w.begin(), [](int x) { return x * x; })` |
+| Input | `{2, 3, 4, 5}` |
+| Output | `{4, 9, 16, 25}` |
+| Status | ✓ Correct |
+
+### TODO Block 4: ranges::for_each (Neighbor Average)
+
+| Field | Value |
+|-------|-------|
+| Code | `ranges::for_each(indices, [&](size_t i) { dst[i] = 0.5 * (src[i-1] + src[i+1]); })` |
+| Input | src=`{10,20,30,40,50}`, indices=`{1,2,3}` |
+| Output | dst=`{0, 20, 30, 40, 0}` |
+| Status | ✓ Correct |
+
+### Errors This Session
+
+None. Implementation correct on first attempt.
+
+### ORTHOGONAL OBSERVATIONS
+
+1. `for_each` iterates indices, not values → lambda captures vectors by reference.
+2. Index range `[1, n-1)` excludes endpoints → `iota(begin, end, 1)` generates `{1, 2, ..., n-2}`.
+3. `0.5 * (a + b)` requires `double` vectors to avoid integer truncation.
