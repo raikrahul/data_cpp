@@ -8,3 +8,4 @@
 | 19         | Containers Worksheet        | Done        |
 | 20         | STL Algorithms Worksheet    | In Progress |
 | 21         | std::for_each Deep Dive     | In Progress |
+| 22         | SIMD & Parallel Execution   | In Progress |
