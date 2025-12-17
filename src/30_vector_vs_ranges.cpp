@@ -28,28 +28,31 @@ int main() {
     //    Allocation -> uninitialized_fill_n -> Done.
     //    Writes = N.
 
-    // std::vector<int> v1...
+    auto v1 = std::vector<int>(N, 8);
 
     // ════════════════════════════════════════════════════════════════════════
     // TODO BLOCK 2: Case 2 - Default Construct + Fill
     // ════════════════════════════════════════════════════════════════════════
     //
     // 1. Construct v2 with N elements (default initialized to 0).
-    // 2. Fill v2 with value 8 using std::ranges::fill.
-    // 3. TRACE: How many times is memory written?
-    //    Allocation -> uninitialized_fill_n(0) -> ranges::fill(8).
-    //    Writes = N (Zero) + N (Eight) = 2N.
+    std::vector<int> v2(N);
 
-    // std::vector<int> v2...
-    // std::ranges::fill...
+    // 2. Fill v2 with value 8 using std::ranges::fill (Modification).
+    std::ranges::fill(v2, 8);
 
     // ════════════════════════════════════════════════════════════════════════
     // VERIFICATION
     // ════════════════════════════════════════════════════════════════════════
 
-    std::cout << "Case 1 (Constructor): Optimal (1 pass)\n";
-    std::cout << "Case 2 (Fill): Suboptimal (2 passes)\n";
-    std::cout << "Punishment N=2^20: Extra 4MB writes in Case 2.\n";
+    std::cout << "Case 1 (Constructor): Initializes v1. Size=" << v1.size() << "\n";
+    std::cout << "Case 2 (Ranges Fill): Modifies v2.    Size=" << v2.size() << "\n";
+
+    if (v1 == v2) {
+        std::cout << "Result: Vectors are IDENTICAL content-wise.\n";
+        std::cout << "Difference: Initialization vs Modification.\n";
+    } else {
+        std::cout << "Result: Vectors DIFFER.\n";
+    }
 
     return 0;
 }
