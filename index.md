@@ -12,3 +12,4 @@
 | 23         | Lambda Anatomy              | Done        |
 | 24         | std::reduce & std::transform| Done        |
 | 25         | Transform Even/Odd          | Done        |
+| 26         | Transform Parity (Practice) | In Progress |
