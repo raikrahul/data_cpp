@@ -18,3 +18,4 @@
 | 29         | Ranges: Find & Equal        | In Progress |
 | 30         | Vector vs Ranges Fill       | In Progress |
 | 31         | Iota & Transform Multiples  | In Progress |
+| 32         | Transform Reduce Avg/StdDev | In Progress |
