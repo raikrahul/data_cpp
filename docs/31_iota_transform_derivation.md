@@ -30,6 +30,18 @@
     - Read 0x104C (19) -> Calc 19*7=133 -> Write 0x104C (133).
 12. **State 2:** {0, 7, 14, ..., 133}.
 
+## Step 3: std::ranges::any_of(v, n -> n % 28 == 0)
+
+13. **Operation:** Check if *any* element satisfies predicate.
+14. **Loop Trace:**
+    - Check v[0] (0): 0 % 28 == 0? -> YES. (Short circuit return TRUE?)
+      *Note: 0 is technically a multiple of 28 (28 * 0).*
+    - If skipping 0 (hypothetically):
+    - Check v[1] (7): 7 % 28 != 0 -> Continue.
+    - Check v[2] (14): 14 % 28 != 0 -> Continue.
+    - Check v[3] (21): 21 % 28 != 0 -> Continue.
+    - Check v[4] (28): 28 % 28 == 0 -> YES -> Return TRUE.
+
 ## Failure Prediction
 
 F1. **Forget Resize:**
