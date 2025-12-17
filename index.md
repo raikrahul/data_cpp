@@ -13,3 +13,4 @@
 | 24         | std::reduce & std::transform| Done        |
 | 25         | Transform Even/Odd          | Done        |
 | 26         | Transform Parity (Practice) | In Progress |
+| 27         | std::equal vs std::mismatch | In Progress |
