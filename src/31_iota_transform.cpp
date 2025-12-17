@@ -47,7 +47,7 @@ int main() {
     //    v[3]=21  -> 21 % 28 == 21
     //    v[4]=28  -> 28 % 28 == 0 -> Found!
 
-    // bool has_multiple_28 = std::ranges::any_of(...);
+    bool has_multiple_28 = std::ranges::any_of(v, [](int& n) { return n % 28 == 0; });
 
     // ════════════════════════════════════════════════════════════════════════
     // VERIFICATION
@@ -57,6 +57,7 @@ int main() {
     for (size_t i = 0; i < v.size(); ++i) std::cout << v[i] << (i < v.size() - 1 ? ", " : "");
 
     std::cout << "}\n";
+    std::cout << "Has multiple of 28? " << std::boolalpha << has_multiple_28 << "\n";
 
     return 0;
 }
