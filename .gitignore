@@ -16,6 +16,18 @@ cmake-build-*/
 *.so
 *.out
 
+# Executables without extension (compiled binaries at root)
+/23_lambda_anatomy
+/array_*
+/auto_*
+/copy_*
+/function_*
+/ranges_*
+/sbrk_*
+/vector_*
+/weak_*
+/why_*
+
 # Cache
 .cache/
 
