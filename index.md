@@ -19,3 +19,7 @@
 | 30         | Vector vs Ranges Fill       | In Progress |
 | 31         | Iota & Transform Multiples  | In Progress |
 | 32         | Transform Reduce Avg/StdDev | In Progress |
+| 33         | Ranges Views Memory Layout  | In Progress |
+| 34         | View Abstraction Layer      | In Progress |
+| 35         | Iota View Formula           | Done        |
+| 36         | Smart Pointer Factory       | In Progress |
