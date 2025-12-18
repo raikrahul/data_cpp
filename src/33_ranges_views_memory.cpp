@@ -247,6 +247,7 @@ int main() {
 
     auto multiples_of_18 = std::views::iota(1, 10) | std::views::transform([](int i){ return i * 18; });
     auto multiples_of_27 = std::views::iota(1, 10) | std::views::transform([](int i){ return i * 27; });
+    (void)multiples_of_27;  // Unused for now
     auto first_two = std::views::take(2);
     auto result = multiples_of_18
                      | std::views::filter([](int x){ return x % 27 == 0; })
