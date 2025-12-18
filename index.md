@@ -23,3 +23,7 @@
 | 34         | View Abstraction Layer      | In Progress |
 | 35         | Iota View Formula           | Done        |
 | 36         | Smart Pointer Factory       | In Progress |
+| 37         | Struct/Class Init & Memory  | In Progress |
+| 38         | Functor vs Lambda State     | In Progress |
+| 39         | Auto Type Deduction & Copy  | In Progress |
+| 40         | Person Name Compare Traps   | In Progress |

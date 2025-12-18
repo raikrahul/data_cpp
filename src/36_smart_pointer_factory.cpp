@@ -55,12 +55,12 @@ public:
     //   Stored in vector -> StrongRef?? or WeakRef??
     //   End of function -> Stack shared_ptr dies -> StrongRef--
     void attach(std::shared_ptr<Observer> obs) {
-        // Fill this
+        (void)obs;  // TODO: Fill this
     }
 
     // TODO C: Implement detach
     void detach(std::shared_ptr<Observer> obs) {
-       // Remove matching observer
+        (void)obs;  // TODO: Remove matching observer
     }
 
 protected:
@@ -74,7 +74,7 @@ protected:
     //         update() returns.
     //         temp_shared_ptr dies -> StrongRef N+1 -> N.
     void notify(double value) const {
-        // Fill this
+        (void)value;  // TODO: Fill this
     }
 };
 
@@ -115,8 +115,7 @@ public:
     // RETURN: shared_ptr? (Overhead 16B). unique_ptr? (Zero overhead, transfer ownership).
     // SELECT: unique_ptr.
     static /*Type*/ void create(int id) {
-        // if id=1 return Circle(3.0)
-        // if id=2 return Rectangle(4.0, 5.0)
+        (void)id;  // TODO: if id=1 return Circle(3.0), if id=2 return Rectangle(4.0, 5.0)
     }
 };
 
