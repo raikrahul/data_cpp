@@ -27,3 +27,4 @@
 | 38         | Functor vs Lambda State     | In Progress |
 | 39         | Auto Type Deduction & Copy  | In Progress |
 | 40         | Person Name Compare Traps   | In Progress |
+| 41         | Inheritance & Virtual Dispatch | In Progress |
