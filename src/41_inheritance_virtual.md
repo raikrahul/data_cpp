@@ -213,3 +213,173 @@ double A=1, B=-1, C=2;
 std::cout << v[0]->get_distance(A,B,C) << "\n";  // your prediction: ?
 std::cout << v[1]->get_distance(A,B,C) << "\n";  // your prediction: ?
 ```
+
+---
+
+## SESSION ERROR REPORT: 2025-12-19
+
+### ERROR 001
+- Line: "vptr is 4 bytes"
+- Wrong: vptr = 4 bytes
+- Correct: vptr = 8 bytes (sizeof(void*) on x86_64)
+- Why sloppy: confused with 32-bit systems
+- Prevent: always run `sizeof(void*)` before assuming
+
+### ERROR 002
+- Line: "vptr is unique per object"
+- Wrong: each object has different vptr VALUE
+- Correct: all objects of SAME class share SAME vptr value
+- Why sloppy: confused storage location vs stored value
+- Prevent: print vptr of two objects of same type, compare
+
+### ERROR 003
+- Line: "pointer type is irrelevant"
+- Wrong: LHS type does not matter
+- Correct: LHS type determines SLOT NUMBER at compile time
+- Why sloppy: incomplete statement
+- Correct statement: LHS type relevant at compile time (slot), irrelevant at runtime (just vptr read)
+
+### ERROR 004
+- Line: "virtual does nothing"
+- Wrong: virtual keyword has no effect
+- Correct: virtual adds 8-byte vptr to object layout
+- Proof: sizeof(NoVirtual)=16, sizeof(OneVirtual)=24, difference=8
+
+### ERROR 005
+- Line: "normal function adds to object size"
+- Wrong: non-virtual member function stored in object
+- Correct: function code in .text, not in object, size=0 overhead
+- Proof: sizeof with and without normal function = same
+
+### ERROR 006
+- Line: "I never specify slot numbers"
+- Wrong: slot numbers are magic
+- Correct: compiler counts virtual functions in base class definition order
+- Calculation: 1st virtual = slot 0 = offset 0, 2nd = slot 1 = offset 8
+
+### ERROR 007
+- Line: "WHATEVER* whatever = &d works"
+- Wrong: any pointer type works
+- Correct: only works if inheritance hierarchy matches AND slot order preserved
+- Proof: Cat* c = (Cat*)&Dog; c->meow() calls Dog::speak (slot 0 of Dog vtable)
+
+### PATTERN: Memorization without verification
+- Symptom: stating facts without running code
+- Fix: print sizeof, print vptr, print vtable[N] before believing anything
+
+### ASSEMBLY LINE: movq (%rax), %rdx
+- movq = move 8 bytes
+- (%rax) = memory at address in rax
+- %rdx = destination register
+- Translation: rdx = *(rax) = read 8 bytes from address rax
+
+### TWO PHASES OF VIRTUAL CALL
+```
+COMPILE TIME:
+  Compiler sees Animal* a
+  Compiler reads Animal class
+  Compiler finds speak() = slot 0
+  Compiler emits: call [vptr + 0]
+
+RUNTIME:
+  CPU reads vptr from object
+  CPU adds slot offset (0, 8, 16...)
+  CPU reads function address from vtable
+  CPU jumps to that address
+```
+
+---
+
+## SESSION ERROR REPORT: 2025-12-19 (Assembly Session)
+
+### ERROR 008
+- Line: "movq -8(%rbp), %rax means move rax into rbp-8"
+- Wrong: destination is first operand
+- Correct: AT&T syntax = SOURCE, DEST (left to right)
+- Why sloppy: mixing Intel syntax (DEST, SRC) with AT&T (SRC, DEST)
+- Prevent: remember AT&T = "from, to" like reading left to right
+
+### ERROR 009
+- Line: "*p gives Dog address"
+- Wrong: *p = address
+- Correct: p = address, *p = content at that address
+- Why sloppy: conflating pointer value with dereferenced value
+- Prevent: p = where, *p = what's there
+
+### ERROR 010
+- Line: "step 1 and step 2 both do *p"
+- Wrong: both steps dereference
+- Correct: step 1 = get p (pointer value), step 2 = do *p (dereference)
+- Why sloppy: not tracking what each step produces
+- Prevent: write rax value after each step
+
+### ERROR 011
+- Line: "movq (%rax), %rdx means rdx into rax"
+- Wrong: backwards again
+- Correct: read memory[rax] → write to rdx
+- Why sloppy: same mistake as ERROR 008
+- Prevent: draw arrow: (%rax) → %rdx
+
+### ERROR 012
+- Line: "p and *p would be same without virtual"
+- Wrong: same values
+- Correct: p = address (0x7ffc1000), *p = object (still different)
+- What changes: no vptr, direct call, fewer steps
+- Why sloppy: conflating virtual dispatch mechanism with pointer semantics
+
+---
+
+## VIRTUAL vs NON-VIRTUAL COMPARISON
+
+### Virtual Call: p->speak() where speak() is virtual
+```
+Step 1: movq -8(%rbp), %rax    ; rax = p = 0x7ffc1000
+Step 2: movq (%rax), %rax      ; rax = *p = vptr = 0x40ada0
+Step 3: movq (%rax), %rdx      ; rdx = vtable[0] = 0x401234
+Step 4: call *%rdx             ; jump to 0x401234 (Dog::speak)
+```
+- 3 memory reads + 1 indirect call
+- Function address determined at RUNTIME
+
+### Non-Virtual Call: p->speak() where speak() is NOT virtual
+```
+Step 1: movq -8(%rbp), %rdi    ; rdi = p = this pointer
+Step 2: call 0x401234          ; hardcoded address of Animal::speak
+```
+- 1 memory read + 1 direct call
+- Function address determined at COMPILE TIME
+
+### Diagram
+```
+VIRTUAL:
+  p → Dog object → vptr → vtable → Dog::speak (runtime lookup)
+
+NON-VIRTUAL:
+  p → Animal::speak (compile-time hardcoded)
+```
+
+### Cost
+- Virtual: 3 loads + indirect call ≈ 10-20 cycles
+- Non-virtual: 1 load + direct call ≈ 3-5 cycles
+
+---
+
+## ASSEMBLY SYNTAX REFERENCE
+
+### AT&T Syntax Rules
+```
+%rax        = register rax
+$5          = immediate value 5
+-8(%rbp)    = memory[rbp - 8]
+(%rax)      = memory[rax]
+movq A, B   = B = A (source first, dest second)
+```
+
+### Virtual Dispatch Assembly Steps
+```
+movq -8(%rbp), %rax    ; get pointer p from stack
+movq (%rax), %rax      ; dereference p to get vptr
+movq (%rax), %rdx      ; read vtable slot 0
+call *%rdx             ; indirect call through register
+```
+
