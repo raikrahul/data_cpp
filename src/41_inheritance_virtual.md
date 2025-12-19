@@ -383,3 +383,109 @@ movq (%rax), %rdx      ; read vtable slot 0
 call *%rdx             ; indirect call through register
 ```
 
+---
+
+## SESSION ERROR REPORT: 2025-12-19 (Detailed Assembly Session)
+
+### ERROR 013: vtable slot miscalculation
+- Line: "b() = slot 2 = offset 16"
+- Wrong: b() at slot 2
+- Correct: b() at slot 3 = offset 24
+- Why: destructor takes slots 0 AND 1 (complete + deleting)
+- Proof:
+  ```
+  vtable[0] = 0x563f30fd51c0 <- complete object dtor
+  vtable[1] = 0x563f30fd5210 <- deleting dtor
+  vtable[2] = 0x563f30fd5270 <- a()
+  vtable[3] = 0x563f30fd52d0 <- b()  ← CORRECT SLOT
+  vtable[4] = 0x563f30fd5330 <- c()
+  ```
+- My code called vtable[2] → printed "Derived::a" → BUG
+- Fix: b() offset = 3 × 8 = 24, not 2 × 8 = 16
+
+### ERROR 014: "stack reads memory"
+- Line: "where does 0x7ffc2000 come from?"
+- Wrong: thought memory appears from nowhere
+- Correct: YOU wrote `p = &d` → stored 0x7ffc2000 at address 0x7ffc1008
+- Why sloppy: forgot assignment stores value
+- Trace:
+  ```
+  You wrote: Base* p = &d;
+  &d = 0x7ffc2000 (address of d)
+  p stored at 0x7ffc1008 on stack
+  memory[0x7ffc1008] = 0x7ffc2000
+  Step 1 reads: this value you stored
+  ```
+
+### ERROR 015: "step 2 goes back to stack"
+- Line: "then i go to the stack again at that place"
+- Wrong: step 2 reads stack
+- Correct: step 2 reads memory[rax] where rax = 0x7ffc2000 (object location, not p's location)
+- Trace:
+  ```
+  Step 1: read memory[0x7ffc1008] → rax = 0x7ffc2000 (stack read)
+  Step 2: read memory[0x7ffc2000] → rax = 0x401000 (NOT stack read)
+  Step 3: read memory[0x401000] → rdx = 0x402500 (NOT stack read)
+  After step 1, never touch 0x7ffc1008 again
+  ```
+
+### ERROR 016: confused rdx vs rax
+- Line: "why rdx now"
+- Answer: compiler choice, registers are temporary storage, pick any available
+
+### REAL DATA FROM PROOF RUN
+```
+=== Proof 5 corrected output ===
+1. rax = p = 0x7ca72ef000a0 (object address)
+2. rax = *(rax) = 0x563f3100ec68 (vptr)
+3. rax = 0x563f3100ec68 + 24 = 0x563f3100ec80 (slot 3 = b())
+4. rdx = *(rax) = 0x563f30fd52d0 (Derived::b address)
+5. call rdx: Derived::b  ← NOW CORRECT
+```
+
+### MEMORY LAYOUT WITH REAL ADDRESSES
+```
+STACK:
+┌─────────────────────────────────────────────────────────────┐
+│ 0x7ca72ef000a0: Derived d object                            │
+│   +0x00: [68 ec 00 31 3f 56 00 00] = vptr = 0x563f3100ec68  │
+│   +0x08: (padding/data)                                      │
+└─────────────────────────────────────────────────────────────┘
+                    │
+                    ↓ vptr points to
+.data.rel.ro:
+┌─────────────────────────────────────────────────────────────┐
+│ 0x563f3100ec68: Derived vtable                              │
+│   +0x00: 0x563f30fd51c0 = complete dtor (slot 0)            │
+│   +0x08: 0x563f30fd5210 = deleting dtor (slot 1)            │
+│   +0x10: 0x563f30fd5270 = Derived::a   (slot 2)             │
+│   +0x18: 0x563f30fd52d0 = Derived::b   (slot 3) ← b() HERE  │
+│   +0x20: 0x563f30fd5330 = Derived::c   (slot 4)             │
+└─────────────────────────────────────────────────────────────┘
+                    │
+                    ↓ slot 3 points to
+.text:
+┌─────────────────────────────────────────────────────────────┐
+│ 0x563f30fd52d0: Derived::b() machine code                   │
+│   push rbp                                                  │
+│   mov rbp, rsp                                              │
+│   ... printf("Derived::b\n") ...                            │
+│   ret                                                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### VIRTUAL CALL FORMULA (CORRECTED)
+```
+p->func() where func() is Nth virtual function after destructors:
+
+offset = (2 + N) × 8    // 2 dtor slots + N user slots
+       = (2 + 1) × 8    // b() is 2nd user func, N=1 (0-indexed: a=0, b=1)
+       = 24
+
+BUT a() is N=0, b() is N=1, c() is N=2:
+  a() offset = (2 + 0) × 8 = 16
+  b() offset = (2 + 1) × 8 = 24
+  c() offset = (2 + 2) × 8 = 32
+```
+
+
