@@ -47,6 +47,7 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 | 54 | Recursive Template Assembly                | [54_recursive_template_asm.cpp](src/54_recursive_template_asm.cpp) | Done        |
 | 55 | Template Dimensions struct                 | [55_template_dimensions.cpp](src/55_template_dimensions.cpp) | Done        |
 | 56 | N-Dimensional Logic                        | [56_n_dimensional_logic.cpp](src/56_n_dimensional_logic.cpp) | Done        |
+| 57 | Swap Evolution (Mechanical Chain)          | [57_swap_evolution.md](src/57_swap_evolution.md) | Done        |
 
 ## Build and Run
 
