@@ -35,6 +35,7 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 | 42 | No Virtual Assembly                        | [42_no_virtual_assembly.s](src/42_no_virtual_assembly.s) | Done        |
 | 43 | Non-Virtual Calls Virtual                  | [43_nonvirtual_calls_virtual.s](src/43_nonvirtual_calls_virtual.s) | Done        |
 | 44 | Assembly Virtual Dispatch                  | [44_assembly_virtual_dispatch.s](src/44_assembly_virtual_dispatch.s) | Done        |
+| 45 | RTTI typeid Address Comparison             | [45_rtti_typeid_address.cpp](src/45_rtti_typeid_address.cpp) | Done        |
 
 ## Build and Run
 
