@@ -1,6 +1,7 @@
 #include <iostream>
 #include <array>
 #include <memory>
+#include <algorithm>
 
 int main() {
     // ════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,11 @@
+title: LECPP - Low-Level C++ Learning
+description: A collection of C++ problems, assembly derivations, and low-level mechanics.
+theme: jekyll-theme-cayman
+show_downloads: true
+google_analytics:
+links:
+  - name: GitHub
+    url: https://github.com/raikrahul/data_cpp
+markdown: kramdown
+plugins:
+  - jekyll-remote-theme

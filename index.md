@@ -1,33 +1,56 @@
-# LECPP Problem Index
+# LECPP - Low-Level C++ Learning
 
-| Problem ID | Title                       | Status      |
-| :--------- | :-------------------------- | :---------- |
-| 16         | Smart Pointers              | Done        |
-| 17         | Endianness                  | Done        |
-| 18         | T9 Predictive Text          | Done        |
-| 19         | Containers Worksheet        | Done        |
-| 20         | STL Algorithms Worksheet    | In Progress |
-| 21         | std::for_each Deep Dive     | In Progress |
-| 22         | SIMD & Parallel Execution   | In Progress |
-| 23         | Lambda Anatomy              | Done        |
-| 24         | std::reduce & std::transform| Done        |
-| 25         | Transform Even/Odd          | Done        |
-| 26         | Transform Parity (Practice) | In Progress |
-| 27         | std::equal vs std::mismatch | In Progress |
-| 28         | Ranges: Generate & Shuffle  | In Progress |
-| 29         | Ranges: Find & Equal        | In Progress |
-| 30         | Vector vs Ranges Fill       | In Progress |
-| 31         | Iota & Transform Multiples  | In Progress |
-| 32         | Transform Reduce Avg/StdDev | In Progress |
-| 33         | Ranges Views Memory Layout  | In Progress |
-| 34         | View Abstraction Layer      | In Progress |
-| 35         | Iota View Formula           | Done        |
-| 36         | Smart Pointer Factory       | In Progress |
-| 37         | Struct/Class Init & Memory  | In Progress |
-| 38         | Functor vs Lambda State     | In Progress |
-| 39         | Auto Type Deduction & Copy  | In Progress |
-| 40         | Person Name Compare Traps   | In Progress |
-| 41         | Inheritance & Virtual Dispatch | In Progress |
-| 42         | No Virtual Assembly         | Done        |
-| 43         | Non-Virtual Calls Virtual   | Done        |
-| 44         | Assembly Virtual Dispatch   | Done        |
+Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-level mechanics analysis. This project focuses on understanding how C++ works under the hood, from memory layout to virtual dispatch.
+
+## Interactive Index
+
+| ID | Title                                      | Source / Note                                      | Status      |
+|:---|:-------------------------------------------|:---------------------------------------------------|:------------|
+| 16 | Smart Pointers                             | [36_smart_pointer_factory.md](src/36_smart_pointer_factory.md) | Done        |
+| 17 | Endianness                                 | [Conversation Log]                                 | Done        |
+| 18 | T9 Predictive Text                         | [T9 Problem]                                       | Done        |
+| 19 | Containers Worksheet                       | [containers_worksheet.cpp](src/containers_worksheet.cpp) | Done        |
+| 20 | STL Algorithms Worksheet                   | [20_stl_algorithms_worksheet.cpp](src/20_stl_algorithms_worksheet.cpp) | In Progress |
+| 21 | std::for_each Deep Dive                    | [21_for_each_deep_dive.cpp](src/21_for_each_deep_dive.cpp) | In Progress |
+| 22 | SIMD & Parallel Execution                  | [22_simd_parallel_puzzle.cpp](src/22_simd_parallel_puzzle.cpp) | In Progress |
+| 23 | Lambda Anatomy                             | [23_lambda_anatomy.cpp](src/23_lambda_anatomy.cpp) | Done        |
+| 24 | std::reduce & std::transform               | [24_reduce_demo.cpp](src/24_reduce_demo.cpp)       | Done        |
+| 25 | Transform Even/Odd                         | [25_transform_even_odd.cpp](src/25_transform_even_odd.cpp) | Done        |
+| 26 | Transform Parity (Practice)                | [26_transform_parity.cpp](src/26_transform_parity.cpp) | In Progress |
+| 27 | std::equal vs std::mismatch                | [27_equal_mismatch.cpp](src/27_equal_mismatch.cpp) | In Progress |
+| 28 | Ranges: Generate & Shuffle                 | [28_ranges_generate.cpp](src/28_ranges_generate.cpp) | In Progress |
+| 29 | Ranges: Find & Equal                       | [29_ranges_find.cpp](src/29_ranges_find.cpp)       | In Progress |
+| 30 | Vector vs Ranges Fill                      | [30_vector_vs_ranges.cpp](src/30_vector_vs_ranges.cpp) | In Progress |
+| 31 | Iota & Transform Multiples                 | [31_iota_transform.cpp](src/31_iota_transform.cpp) | In Progress |
+| 32 | Transform Reduce Avg/StdDev                | [32_transform_reduce.cpp](src/32_transform_reduce.cpp) | In Progress |
+| 33 | Ranges Views Memory Layout                 | [33_ranges_views_memory.cpp](src/33_ranges_views_memory.cpp) | In Progress |
+| 34 | View Abstraction Layer                     | [34_view_abstraction.cpp](src/34_view_abstraction.cpp) | In Progress |
+| 35 | Iota View Formula                          | [35_iota_view_formula.cpp](src/35_iota_view_formula.cpp) | Done        |
+| 36 | Smart Pointer Factory                      | [36_smart_pointer_factory.md](src/36_smart_pointer_factory.md) | In Progress |
+| 37 | Struct/Class Init & Memory                 | [37_struct_class_init.md](src/37_struct_class_init.md) | In Progress |
+| 38 | Functor vs Lambda State                    | [38_functor_vs_lambda.md](src/38_functor_vs_lambda.md) | In Progress |
+| 39 | Auto Type Deduction & Copy                 | [39_auto_type_deduction.md](src/39_auto_type_deduction.md) | In Progress |
+| 40 | Person Name Compare Traps                  | [40_person_name_compare.md](src/40_person_name_compare.md) | In Progress |
+| 41 | Inheritance & Virtual Dispatch             | [41_inheritance_virtual.md](src/41_inheritance_virtual.md) | In Progress |
+| 42 | No Virtual Assembly                        | [42_no_virtual_assembly.s](src/42_no_virtual_assembly.s) | Done        |
+| 43 | Non-Virtual Calls Virtual                  | [43_nonvirtual_calls_virtual.s](src/43_nonvirtual_calls_virtual.s) | Done        |
+| 44 | Assembly Virtual Dispatch                  | [44_assembly_virtual_dispatch.s](src/44_assembly_virtual_dispatch.s) | Done        |
+
+## Build and Run
+
+Each source file can be compiled individually. For example:
+
+```bash
+g++ -std=c++20 src/21_for_each_deep_dive.cpp -o bin/21_dive
+./bin/21_dive
+```
+
+## Assembly Analysis
+
+Assembly problems are annotated with derivations. To assemble and link manually:
+
+```bash
+as src/44_assembly_virtual_dispatch.s -o 44.o
+gcc 44.o -o 44_test
+./44_test
+```
