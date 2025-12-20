@@ -28,3 +28,6 @@
 | 39         | Auto Type Deduction & Copy  | In Progress |
 | 40         | Person Name Compare Traps   | In Progress |
 | 41         | Inheritance & Virtual Dispatch | In Progress |
+| 42         | No Virtual Assembly         | Done        |
+| 43         | Non-Virtual Calls Virtual   | Done        |
+| 44         | Assembly Virtual Dispatch   | Done        |
