@@ -36,6 +36,13 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 | 43 | Non-Virtual Calls Virtual                  | [43_nonvirtual_calls_virtual.s](src/43_nonvirtual_calls_virtual.s) | Done        |
 | 44 | Assembly Virtual Dispatch                  | [44_assembly_virtual_dispatch.s](src/44_assembly_virtual_dispatch.s) | Done        |
 | 45 | RTTI typeid Address Comparison             | [45_rtti_typeid_address.cpp](src/45_rtti_typeid_address.cpp) | Done        |
+| 46 | Template Power Function                    | [46_template_power.cpp](src/46_template_power.cpp) | In Progress |
+| 47 | countEqualItems Template                   | [47_count_equal_items.cpp](src/47_count_equal_items.cpp) | Done        |
+| 48 | Abbreviated Template Syntax                | [48_abbreviated_template.cpp](src/48_abbreviated_template.cpp) | In Progress |
+| 49 | Template vs Auto Assembly                  | [49_template_vs_auto_asm.cpp](src/49_template_vs_auto_asm.cpp) | Done        |
+| 50 | Abbreviated Duck Typing                    | [50_abbreviated_duck_typing.cpp](src/50_abbreviated_duck_typing.cpp) | Done        |
+| 51 | Missing size() Error                       | [51_missing_size_error.cpp](src/51_missing_size_error.cpp) | Done        |
+| 52 | All Syntax Versions                        | [52_all_syntax_versions.cpp](src/52_all_syntax_versions.cpp) | Done        |
 
 ## Build and Run
 
