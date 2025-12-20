@@ -43,6 +43,10 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 | 50 | Abbreviated Duck Typing                    | [50_abbreviated_duck_typing.cpp](src/50_abbreviated_duck_typing.cpp) | Done        |
 | 51 | Missing size() Error                       | [51_missing_size_error.cpp](src/51_missing_size_error.cpp) | Done        |
 | 52 | All Syntax Versions                        | [52_all_syntax_versions.cpp](src/52_all_syntax_versions.cpp) | Done        |
+| 53 | C++ Templates Worksheet                    | [53_cpp_templates_worksheet.md](src/53_cpp_templates_worksheet.md) | Done        |
+| 54 | Recursive Template Assembly                | [54_recursive_template_asm.cpp](src/54_recursive_template_asm.cpp) | Done        |
+| 55 | Template Dimensions struct                 | [55_template_dimensions.cpp](src/55_template_dimensions.cpp) | Done        |
+| 56 | N-Dimensional Logic                        | [56_n_dimensional_logic.cpp](src/56_n_dimensional_logic.cpp) | Done        |
 
 ## Build and Run
 

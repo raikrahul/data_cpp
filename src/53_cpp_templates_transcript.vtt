@@ -1,0 +1,109 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:10.000
+[MUSIC]
+
+2
+00:00:12.672 --> 00:00:18.399
+So, you've learned to make your code
+more expressive using C++ templates.
+
+3
+00:00:18.399 --> 00:00:23.291
+Templates serve as a blueprint that
+can be applied uniformly to all
+
+4
+00:00:23.291 --> 00:00:26.316
+the types they are instantiated with.
+
+5
+00:00:26.316 --> 00:00:31.213
+But now, I would like to show you
+some additional ways in which you can
+
+6
+00:00:31.213 --> 00:00:35.130
+shape templates to behave
+exactly as you want.
+
+7
+00:00:35.130 --> 00:00:40.014
+You will learn how to use so-called
+template specializations when a template
+
+8
+00:00:40.014 --> 00:00:43.351
+should receive a special treatment for
+a given type.
+
+9
+00:00:43.351 --> 00:00:49.241
+You will also discover that template
+parameters are not always just data types.
+
+10
+00:00:49.241 --> 00:00:53.361
+They can also be numeric
+integer values which you can
+
+11
+00:00:53.361 --> 00:00:59.090
+use to change the size of your data and
+also vary other things.
+
+12
+00:00:59.090 --> 00:01:02.210
+Look again at the same code as before.
+
+13
+00:01:02.210 --> 00:01:06.158
+This code defines a function template for
+integer powers.
+
+14
+00:01:06.158 --> 00:01:09.169
+You can instantiate the templates for
+
+15
+00:01:09.169 --> 00:01:13.750
+integers, floats, doubles,
+or other data types.
+
+16
+00:01:13.750 --> 00:01:19.634
+There exists, however, cases for
+which this generic code is not suitable.
+
+17
+00:01:19.634 --> 00:01:26.650
+For some types, it could be inefficient,
+or it could fail to compile altogether.
+
+18
+00:01:26.650 --> 00:01:32.010
+Remember, for example, that the code
+cannot be instantiated with a string type.
+
+19
+00:01:32.010 --> 00:01:36.439
+But C++ offers a workaround to this
+problem in the form of template
+
+20
+00:01:36.439 --> 00:01:38.190
+specialization.
+
+21
+00:01:38.190 --> 00:01:43.044
+Here's a specialization of the function
+template for the string data type.
+
+22
+00:01:43.044 --> 00:01:47.678
+In this example, the specialized function
+produces a string which describes
+
+23
+00:01:47
