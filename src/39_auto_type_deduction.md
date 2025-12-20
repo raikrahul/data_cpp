@@ -1,4 +1,6 @@
-01. sizeof(int) = 4, sizeof(double) = 8, alignof(int) = 4, alignof(double) = 8 ✓
+:01. DRAW TYPE MAP. `int x = 5;` -> `x` is `int`. Stack [0x1000]=5. `const int& cr = x;` -> `cr` is `const int&` pointing to [0x1000]. Input `auto y = cr;`. Compiler Rule: Drop top-level `const` and `&`. Result: `y` is `int`. Allocates [0x1004]=5 (Copy). Input `auto& z = cr;`. Rule: Keep `const`. Result: `z` is `const int&` -> [0x1000]. Input `const auto w = x;`. Rule: Enforce `const`. `w` is `const int` -> [0x1008]=5. **Action**: Deduce `auto* p = &x;` -> `int*`. Deduce `auto& r = x;` -> `int&`. **Surprise**: `decltype(auto)` keeps exact type. `decltype(auto) d = cr` -> `const int&`. **Trap**: `auto v = {1};` -> `std::initializer_list<int>` (Stack object of 2 pointers). Not `int`. Check byte size difference: `int`=4, `init_list`=16.
+# Auto Type Deduction Analysis
+
 02. struct Z { int a; double b; int c; }; → offsetof(Z,a) = 0, offsetof(Z,b) = 8, offsetof(Z,c) = 16 → sizeof(Z) = 24 ✓
 03. Memory layout: [0x7ffc_a000..0x7ffc_a003] = a, [0x7ffc_a008..0x7ffc_a00f] = b, [0x7ffc_a010..0x7ffc_a013] = c, [0x7ffc_a004..0x7ffc_a007] = 4 padding bytes ✓
 04. Incorrect syntax: `auto z zz;` → compiler token stream: [auto(0x01), identifier(0x02), identifier(0x03)] → parse error: expected `=` or `;` after declarator → error code: C2062 ✗

@@ -1,4 +1,6 @@
-# Failure Prediction
+:01. DRAW INSTANTIATION. `ipow<double>(2.0,3)` → Code at 0x4000. iter₀: result=1.0. iter₁: 1.0×2.0=2.0. iter₂: 2.0×2.0=4.0. iter₃: 4.0×2.0=8.0. Return 8.0. Verify 2³=8 ✓. :02. DRAW INSTANTIATION. `ipow<int>(2,3)` → Code at 0x4030. iter₀: result=1. iter₁: 1×2=2. iter₂: 2×2=4. iter₃: 4×2=8. Return 8. :03. TRAP. `ipow("text",3)` → T=const char*. No operator*=. Compile error. :04. FIX. `template<> string ipow<string>(string x, int n)` → Specialization. Returns concatenated string. :05. DRAW FixedArray<3>. [0x7000]=1.0. [0x7008]=2.0. [0x7010]=3.0. sizeof=24. :06. TRAP RECURSION. `return N + f<N-1>()` → 3→2→1→0→-1→... No base case. Compiler crash. :07. FIX. `if constexpr (N==0) return 0;` → Base case at N=0. :08. F1. Typo `veclovity`. Fix: `velocity`. :09. F2. Typo `sisz_t`. Fix: `size_t`. :10. CONSTANT FOLDING. `f<3>()` → Compiler calculates 3+2+1+0=6 → Assembly: `movl $6, %eax`. No function in binary.
+# Templates Worksheet
+
 - Failure 1: Mistaking `auto` deduction for template substitution (Exercise 1/5). You will assume `auto` behaves like `template<T>` but forget implicit conversions or pointer decay logic.
 - Failure 2: Incorrect pointer arithmetic (Exercise 1/5). You will forget that `pos[0]` on a pointer `double*` works but `integrated(pos, vel)` decay changes semantics from array reference to pointer copy.
 - Failure 3: Ignoring vptr/padding (Exercise 1/3). You will miscalculate struct sizes by forgetting alignment and virtual table pointers if applicable (though not used here directly, implicitly in vectors).

@@ -1,4 +1,6 @@
+:01. DRAW STACK vs HEAP. Stack: 0x7FFC... (high). Heap: 0x5B19... (low). Distance: 40TB. :02. PROVE. `int x=42; std::cout<<&x;` → 0x7FFC8C522. `int* p=new int(42); std::cout<<p;` → 0x5B191ADD. 0x7FFC > 0x5B19 ✓. :03. TRAP. `std::array<10, int>` → ERROR. Template is `<T, N>`. Fix: `std::array<int, 10>`. :04. TRAP. Thought `auto&&` = reference-to-reference. WRONG. `T& &&` → `T&`. Reference collapsing. :05. CALCULATE COPY. 40MB vector. Copy: 24457μs. Move: <1μs. Ratio: 24457×. :06. MEASURE MEMORY. Copy: 80MB (original+duplicate). Move: 40MB (original only). Savings: 50%. :07. TRAP. `for(auto& x : temp())` → ERROR. lvalue ref cannot bind rvalue. Fix: `auto&&`. :08. RULE. `auto& x = lvalue` ✓. `auto& x = rvalue` ✗. `auto&& x = lvalue` ✓. `auto&& x = rvalue` ✓. :09. DEDUCTION. `auto&& elem : arr` where arr is lvalue. elem type = `T&` not `T&&`. :10. ROOT CAUSE. Memorization without derivation. Skimming without reading. Asking without testing.
 # Session Error Report
+
 
 ERROR 1: std::array template argument order wrong, wrote `std::array<10, std::unique_ptr<int>>` instead of `std::array<std::unique_ptr<int>, 10>`, template signature is `template<typename T, size_t N>` so TYPE first SIZE second, compiler error "template argument 1 is invalid", fix by swapping arguments to match template signature TYPE then SIZE.
 

@@ -1,4 +1,5 @@
-# 41_inheritance_virtual_worksheet
+:01. DRAW OBJECT LAYOUT [0x2000]. `struct Base { int b; virtual void f(); };`. [0x2000]=vptr (8 bytes). [0x2008]=b (4 bytes). Total=16 bytes (padding). DRAW VTABLE [0x3000]. [0x3000]=&Base::f. DRAW Derived [0x4000]. [0x4000]=vptr (points to DerivedVTable). [0x4008]=b. [0x400C]=d. total=16 bytes. **Why**: `vptr` is always at offset 0 (usually). Call `p->f()` -> Load [p] (vptr) -> Load [vptr+0] (func) -> Call. **Cost**: 2 Memory Loads + Indirect Jump. **Space**: 8 bytes per object. **Action**: Calculate `sizeof(Base)` if `f` was not virtual. 4 bytes. Virtual tax = 300% size increase.
+# Inheritance & Virtual Dispatch Analysis
 
 ## START FROM MIDDLE: You have ptr=0x6000_0000, you want to call get_distance(). What happens?
 

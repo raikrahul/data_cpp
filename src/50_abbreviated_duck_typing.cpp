@@ -177,7 +177,7 @@ int main() {
     // Memory = 1000 × 4 = 4000 bytes
     // Cache lines = 4000 / 64 = 62.5 → 63 cache line touches
     std::vector<int> v5(1000);
-    for (int i = 0; i < 1000; ++i) v5[i] = i;  // {0,1,2,...,999}
+    for (size_t i = 0; i < 1000; ++i) v5[i] = static_cast<int>(i);  // {0,1,2,...,999}
     int r7 = countSmallerThan(v5, 500);
     printf("vector<int>{0..999}, 500 → count=%d (expected 500)\n", r7);
     

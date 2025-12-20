@@ -97,7 +97,7 @@ auto integrate(auto position, auto velocity, double dt) {
     // velocity * dt = 2.5f * 0.1 = 0.25
     // static_cast to position type (double)
     // 100.0 + 0.25 = 100.25
-    return position + static_cast<decltype(position)>(velocity * dt);
+    return position + static_cast<decltype(position)>(static_cast<double>(velocity) * dt);
 }
 #endif
 

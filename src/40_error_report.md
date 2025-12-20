@@ -1,4 +1,6 @@
+:01. TRAP ADDRESS. `&p1.name` = 0x7FFC1000. `&p2.name` = 0x7FFC1020. 0x7FFC1000 ≠ 0x7FFC1020. Address compare = false. Content same. :02. TRAP SSO. "Alice" len=5 < 15. Buffer inside string at +16. p1.name.c_str()=0x7FFC1010. p2.name.c_str()=0x7FFC1030. Pointer compare = false. :03. TRAP MEMCMP. `memcmp("Alice","AliceX",5)` → 5 bytes equal → 0 (WRONG). Sizes differ: 5 ≠ 6. :04. CORRECT. `p1.name == p2.name` → operator== → size check → byte compare → true. :05. TRAP EMPTY. `max_element(v.begin(), v.end())` where v.size()=0. end()=begin(). Dereference end() = UB. :06. EDGE N=0. Check `v.empty()` before algorithm. :07. F1. Missing `#include <vector>`. Used type without header. Compile error. :08. F2. Pointer compare instead of content. `&a==&b` vs `a==b`. :09. F3. c_str() returns buffer pointer. Different strings = different addresses. :10. F4. memcmp(a,b,min(len)) ignores longer string.
 # Error Report: Session 2025-12-19
+
 
 ## Errors Made
 

@@ -35,8 +35,8 @@ struct MyBrokenContainer {
 struct MyWorkingContainer {
     int data[3] = {100, 200, 300};
     
-    int& operator[](int i) { return data[i]; }
-    const int& operator[](int i) const { return data[i]; }
+    int& operator[](size_t i) { return data[i]; }
+    const int& operator[](size_t i) const { return data[i]; }
     
     // size() EXISTS
     size_t size() const { return 3; }  // returns 3

@@ -1,4 +1,6 @@
-# 48 Abbreviated Template Syntax Derivation
+:01. DRAW SYNTAX MAP. FULL: `template<typename T> T f(T x)`. ABBREV: `auto f(auto x)`. :02. EQUIVALENCE. `auto f(auto x)` → Compiler generates: `template<typename __T1> __T1 f(__T1 x)`. Same machine code. :03. CALCULATE. `f(2.0)` → x=2.0 → __T1=double → `double f(double x=2.0)`. :04. DRAW MEMORY. `iPow(2.0, 3)` instantiates at 0x4064 (56 bytes). `iPow(2, 3)` instantiates at 0x4000 (48 bytes). 2 functions generated. :05. TRAP F1. `decltype(x)` where x is `const auto&`. Input: `f(42)`. x=const int&. decltype(x)=const int&. Cannot modify. Fix: `std::remove_cvref_t<decltype(x)>` = int. :06. TRAP F2. `f("hi")` where f uses `x*x`. const char* has no operator*. Compile error. :07. COUNT INSTANTIATIONS. `f(1)` → int#1. `f(2)` → int#1 (reuse). `f(1.0)` → double#2. `f(1.0f)` → float#3. Total: 3. :08. LAMBDA. `[](auto x){return x*x;}` → sizeof(lambda)=1 byte. operator()<int> at 0x4100. operator()<double> at 0x4150. :09. C++ vs Python. C++ `f("hi")` → compile error (0 cost). Python `f("hi")` → runtime crash (user cost). :10. PERF. C++ `iPow<double>(2.0,10)` → 2ns. Python → 500ns. Ratio: 250×.
+# Abbreviated Template Syntax Derivation
+
 
 ## Input→Output
 ```

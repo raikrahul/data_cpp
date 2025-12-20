@@ -1,4 +1,6 @@
-# 46 Template Power Function Derivation
+:01. DRAW INSTANTIATION. `pow<int>(2,3)` → Compiler generates: `int pow(int x=2, int n=3)`. Code at 0x1000. :02. CALCULATE. iter₀: result=1. iter₁: 1×2=2. iter₂: 2×2=4. iter₃: 4×2=8. n=3 loops. Return 8. Verify: 2³=8 ✓. :03. DRAW INSTANTIATION. `pow<double>(2.5,2)` → Compiler generates: `double pow(double x=2.5, int n=2)`. Code at 0x1030. :04. CALCULATE. iter₀: result=1.0. iter₁: 1.0×2.5=2.5. iter₂: 2.5×2.5=6.25. Return 6.25. Verify: 2.5²=6.25 ✓. :05. TRAP F1. `pow(2.5, 3.0)` → n is double. Implicit int conversion 3.0→3. Works but warning. :06. TRAP F2. `pow<int>(2.5, 3)` → x=2.5 forced to int=2. 2³=8 not 15.625. Type mismatch. :07. EDGE. `pow(5,0)` → n=0 → loop 0 times → result=1 unchanged. 5⁰=1 ✓. :08. EDGE. `pow(0,0)` → 0⁰ mathematically undefined. Code returns 1. ⚠. :09. SCALE. `pow(2,10)` → 1→2→4→8→16→32→64→128→256→512→1024. 10 multiplies. O(n). :10. OPTIMIZATION. `pow(2,8)` by squaring: ((2²)²)²=((4)²)²=(16)²=256. 3 multiplies vs 8. O(log n).
+# Template Power Function Derivation
+
 
 ## Input→Output
 ```

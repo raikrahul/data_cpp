@@ -15,7 +15,9 @@
 15. Failure Prediction F6 (Return by Value): `Person p = make_person()` → RVO (Return Value Optimization) → Constructed in place. No copy. Address of `p` in `main` passed as hidden argument to `make_person`.
 16. Code verification task: Check `sizeof(Person)`. If 32, using Clang/libc++. If 40/48, using GCC/libstdc++. Adjust offsets accordingly.
 17. Trick: `std::string` internal pointer points to *internal buffer* (SSO) or *allocated memory* (Heap). User must differentiate by inspecting address value vs structure address.
-18. Trick: `*(int*)&p` modification → Changes `age`. Direct memory manipulation bypasses protection (if any).
+18. Trick: `*(int*)&p` modification → Changes `age`.:01. DRAW MEMORY LAYOUT [0x1000]. `struct Pad { char c; int i; };`. [0x1000]=c (1 byte). [0x1001..0x1003]=UNUSED (Padding). [0x1004..0x1007]=i (4 bytes). **Why**: `int` requires 4-byte alignment. It cannot start at 0x1001. Efficiency: Used=5, Allocated=8. Ratio=62%. **Verification**: `sizeof(Pad)` is 8, not 5. **Reorder**: `struct Pack { int i; char c; };`. [0x1000]=i. [0x1004]=c. [0x1005..0x1007]=Padding. Still 8 bytes? Yes, because total size must align to largest member (4). **Array Impact**: `Pad arr[2]`. [0x1000]..[0x1007] (Pad 1), [0x1008]..[0x100F] (Pad 2). Hole propagates. **Action**: Calculate wasted bytes in `struct { bool a; double b; bool c; }`. 1+7(pad)+8+1+7(pad)=24 bytes. Reordered: 8+1+1+6(pad)=16 bytes. Savings=33%.
+# Struct/Class Init & Memory Analysis
+Direct memory manipulation bypasses protection (if any).
 19. Trick: `myNeighbor.name.c_str()` return value lifetime → tied to `myNeighbor`. If `myNeighbor` destroyed, pointer dangles.
 20. Edge Case: `age=INT_MAX+1` → 0x7FFFFFFF + 1 = 0x80000000 → -2147483648 (Overflow/Wrap).
 21. Edge Case: `height=NaN` → 0x7FC00000. Comparison `h == h` returns False.

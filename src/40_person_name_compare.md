@@ -1,4 +1,6 @@
-01. struct Person { std::string name; int age; }; → sizeof(Person) = 32(string) + 4(int) + 4(pad) = 40 bytes ✓
+:01. DRAW MEMORY. String Literal "Alice" at [0x4000]. `std::string s1 = "Alice"` at [Stack 0x5000]. Heap Buffer at [0x6000]. `operator==` compares *Content* (0x6000 vs 0x4000). DRAW Pointer `const char* p1="Alice"`. `const char* p2="Alice"`. `p1==p2` compares *Address* (0x4000 vs 0x4000). Success? Yes, due to String Interning. DRAW `char array[]="Alice"`. New Address [0x7000]. `p1==array` -> False. **Why**: Content comparison != Address comparison. **Trap**: `if(name == "Alice")` works for string, fails for raw pointers if not interned. **Action**: Always cast to `string_view` for comparison.
+# Person Name Compare Traps
+
 02. Person p1{"Alice", 30}; @ Stack 0x7ffc_a000 → name @ offset 0, age @ offset 32 ✓
 03. Person p2{"Alice", 25}; @ Stack 0x7ffc_a028 → different object, same name content ✓
 04. SSO check: "Alice" length = 5 < 15 (SSO threshold) → stored inline in string buffer ✓
