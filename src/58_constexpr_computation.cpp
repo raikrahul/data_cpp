@@ -3,7 +3,10 @@
 
 // 01. Define a compile-time constant for Pi using std::numbers if C++20, or manual
 // TODO: Use constexpr for this.
-constexpr double PI = 3.14159265358979323846;
+// constexpr double PI = 3.14159265358979323846;
+
+constexpr double PI = std::numbers::pi;
+
 
 // 02. Implement 'coeff' function
 // REQUIREMENTS:
