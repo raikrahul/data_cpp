@@ -12,6 +12,7 @@
 #include <numbers>
 #include <cmath>
 #include <cstdint>
+#include <chrono>
 
 // ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 // │ CONSTEXPR TAYLOR SERIES FOR sin(x):                                                     │
@@ -136,6 +137,54 @@ int main() {
     // │    RUNTIME - just loads immediate, NO additional rounding                          │
     // └─────────────────────────────────────────────────────────────────────────────────────┘
     
+    // ┌─────────────────────────────────────────────────────────────────────────────────────┐
+    // │ BENCHMARK: CONSTEXPR vs RUNTIME                                                     │
+    // └─────────────────────────────────────────────────────────────────────────────────────┘
+    
+    std::cout << "=== BENCHMARK: CONSTEXPR vs RUNTIME (10 million iterations) ===\n\n";
+    
+    constexpr int ITERATIONS = 10'000'000;
+    volatile float sink = 0.0f;  // Prevent optimization from eliminating loop
+    
+    // Benchmark CONSTEXPR (just loading pre-computed value)
+    {
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < ITERATIONS; ++i) {
+            sink = sin_of_pi;  // Load pre-computed constexpr value
+        }
+        auto end = std::chrono::high_resolution_clock::now();
+        auto ns = static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
+        std::cout << "CONSTEXPR load:     " << ns / 1'000'000.0 << " ms total, "
+                  << ns / ITERATIONS << " ns/iter\n";
+    }
+    
+    // Benchmark RUNTIME (calling std::sin each time)
+    {
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < ITERATIONS; ++i) {
+            sink = std::sin(pi_f);  // Compute std::sin at runtime
+        }
+        auto end = std::chrono::high_resolution_clock::now();
+        auto ns = static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
+        std::cout << "RUNTIME std::sin:   " << ns / 1'000'000.0 << " ms total, "
+                  << ns / ITERATIONS << " ns/iter\n";
+    }
+    
+    // Benchmark RUNTIME (calling our Taylor series each time)
+    {
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < ITERATIONS; ++i) {
+            sink = constexpr_sin(pi_f);  // Compute Taylor series at runtime
+        }
+        auto end = std::chrono::high_resolution_clock::now();
+        auto ns = static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
+        std::cout << "RUNTIME Taylor sin: " << ns / 1'000'000.0 << " ms total, "
+                  << ns / ITERATIONS << " ns/iter\n";
+    }
+    
+    std::cout << "\nCONCLUSION: constexpr = just load, runtime = full computation\n";
+    std::cout << "(sink=" << sink << " to prevent optimization)\n\n";
+
     std::cout << "=== TRACE: ROUND-OFF ACCUMULATION in sin(π) ===\n\n";
     
     // Show how error accumulates term by term
