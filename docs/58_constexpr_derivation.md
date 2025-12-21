@@ -159,3 +159,24 @@ RC5. Asking "why" before understanding "what"
 [ ] Before asking "why" → Trace register state line-by-line
 [ ] Before calling something "confusing" → Draw data flow diagram
 [ ] Before frustration → Ask "what is the optimization target"
+
+---ADDITIONAL ERROR (2025-12-21 17:28)---
+
+E9. const = compile-time constant (WRONG)
+What you said: "constant variables are always compile time constants"
+Reality: const = "read-only after init"; constexpr = "compile-time required"
+Counterexample: const int x = rand(); → x is const, x is NOT compile-time
+Cause: Conflating "read-only" with "known at compile time"
+Prevention: const = WHEN you can write (never after init); constexpr = WHEN value is computed (build time)
+
+PROOF:
+const int a = 24;         → compile-time ✓ (literal)
+const int b = rand();     → runtime ✓ (function call)
+const int c = cin.get();  → runtime ✓ (user input)
+constexpr int d = 24;     → compile-time ✓ (forced)
+constexpr int e = rand(); → ERROR ✗ (rand not constexpr)
+
+ORTHOGONAL QUESTION:
+Why did you assume const = compile-time? → You read "constant" and thought "fixed at build" → But "constant" in C++ means "immutable at runtime" not "known at compile time" → Two different axes:
+AXIS 1: When can you WRITE? (const vs non-const)
+AXIS 2: When is value COMPUTED? (compile-time vs runtime)
