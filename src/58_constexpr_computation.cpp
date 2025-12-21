@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cmath>
+#include <numbers>
 
 // 01. Define a compile-time constant for Pi using std::numbers if C++20, or manual
 // TODO: Use constexpr for this.
@@ -50,6 +51,7 @@ int main() {
     // 06. Output result
     std::cout << "Interaction (compile-time): " << interaction << "\n";
     std::cout << "Poly (compile-time): " << p_val << "\n";
+    std::cout << "Particle mass: " << particle_mass << ", charge: " << particle_charge << ", y(PI): " << y << "\n";
 
     // 07. FAILURES (Uncomment to see errors)
     // int runtime_in;
@@ -57,9 +59,9 @@ int main() {
     // constexpr int k = runtime_in; // ERROR: Not a constant expression
 
     // 08. Runtime usage of constexpr function
-    // double dyn_x;
-    // std::cin >> dyn_x;
-    // std::cout << "Runtime Poly: " << poly(1.0, 2.0, 1.0, dyn_x) << "\n"; // Valid!
+    double dyn_x, dyn_y;
+    std::cin >> dyn_x >> dyn_y;
+    std::cout << "Runtime Coeff: " << coeff(dyn_x, dyn_y) << "\n"; // Valid!
 
     return 0;
 }

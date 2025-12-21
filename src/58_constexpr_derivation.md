@@ -82,3 +82,80 @@ F7. constexpr double d = 1.0/0.0; → Expect infinity? NO. Compile error (UB) �
 F8. constexpr int val = f(cin_input); → Error. Args must be constant ✗
 F9. Confuse literal "24" with computed 24. Literal parsed as token ✗
 F10. Assume constexpr function ALWAYS runs at compile time. NO. Dual nature ✗
+
+---SESSION ERRORS (2025-12-21)---
+
+E1. movapd misread
+What you said: "move a parity decimal"
+Reality: MOV Aligned Packed Double
+Cause: Guessing acronym instead of reading Intel manual
+Prevention: Look up instruction in Intel SDM before guessing
+
+E2. % prefix confusion
+What you said: "% means dereference"
+Reality: % = AT&T register prefix (not dereference)
+Cause: Mixing AT&T and Intel syntax
+Prevention: %reg = register, (%reg) = memory dereference
+
+E3. XMM register size confusion
+What you said: "64 bits wide"
+Reality: 128 bits wide, but scalar double uses 64 bits (lower half)
+Cause: Confusing data size with register size
+Prevention: Register = container size, Data = content size
+
+E4. constexpr = compile-time ONLY (WRONG)
+What you thought: constexpr forbids runtime usage
+Reality: constexpr VARIABLE = compile-time only; constexpr FUNCTION = dual mode
+Cause: Partial reading of definition
+Prevention: Read FULL definition: "constexpr function CAN be evaluated at compile time"
+
+E5. pxor purpose confusion
+What you asked: "why XOR after compare"
+Reality: XOR prepares 0.0 for x==y case BEFORE branch decision
+Cause: Expecting sequential logic, compiler uses speculative preparation
+Prevention: Trace instruction flow, not logical flow
+
+E6. Backup confusion
+What you asked: "why backup x if compare already done"
+Reality: Compare sets FLAGS, backup protects DATA before pxor destroys it
+Cause: Confusing flags (metadata) with registers (data)
+Prevention: FLAGS = separate from XMM registers
+
+E7. "why so complex" frustration
+What you said: "can't you just return if non-zero"
+Reality: Compiler optimizes for branch misprediction avoidance
+Cause: Not understanding CPU pipeline and speculative execution
+Prevention: Learn: conditional prep (3 cycles) < misprediction penalty (15 cycles)
+
+E8. Compiler over-optimization
+What emerged: Simple approach often same speed
+Reality: Compiler applied generic pattern; may not help this specific case
+Lesson: Compilers are not always optimal; measure, don't assume
+
+---ORTHOGONAL QUESTIONS---
+
+Q1. You asked about constexpr after seeing assembly → WHY did you not ask about constexpr BEFORE writing assembly-level code?
+
+Q2. You confused movapd meaning → WHY did you not look up the instruction when first seeing it?
+
+Q3. You thought constexpr = compile-only → WHY did you not test with cin values earlier to discover dual nature?
+
+Q4. You asked "why backup" → WHY did you not trace register contents line-by-line to see pxor destroys %xmm0?
+
+Q5. You got frustrated with complexity → WHY did you not ask "what is the compiler optimizing FOR" before asking "why so complex"?
+
+---ROOT CAUSES---
+
+RC1. Guessing instead of reading documentation
+RC2. Partial definitions instead of complete definitions
+RC3. Expecting logic flow instead of tracing data flow
+RC4. Not tracing register state step-by-step
+RC5. Asking "why" before understanding "what"
+
+---PREVENTION CHECKLIST---
+
+[ ] Before guessing acronym → Search Intel SDM
+[ ] Before assuming keyword meaning → Read cppreference FULL definition
+[ ] Before asking "why" → Trace register state line-by-line
+[ ] Before calling something "confusing" → Draw data flow diagram
+[ ] Before frustration → Ask "what is the optimization target"
