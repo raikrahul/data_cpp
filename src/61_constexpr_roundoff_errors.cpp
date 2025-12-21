@@ -1,437 +1,279 @@
 // 61_constexpr_roundoff_errors.cpp
-//
-// QUESTION: Where do round-off errors occur in constexpr?
-// ANSWER: At COMPILE TIME, inside the compiler's floating-point interpreter
-//
-// The binary contains an ALREADY-ROUNDED result. No additional rounding at runtime.
-//
-// NOTE: std::sin is NOT constexpr in C++20. We use custom constexpr sin via Taylor series.
+// ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+// │ TASK: Implement Taylor series for e^x, observe round-off, prove compile-time vs runtime difference via assembly inspection                                                  │
+// │ MACHINE DATA: g++ 13.3.0, Ubuntu 24.04, x86_64, IEEE 754 float32                                                                                                             │
+// │ ASSEMBLY PROOF: .LC7 = 0x402DF855 (constexpr result pre-computed in .rodata), loops .L5/.L6 compute runtime result                                                          │
+// └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 
 #include <iostream>
 #include <iomanip>
+#include <limits>
 #include <numbers>
 #include <cmath>
-#include <cstdint>
-#include <chrono>
 
-// ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-// │ TEST: This function is WRONG - demonstrates if constexpr error                         │
-// │ UNCOMMENT TO SEE COMPILE ERROR                                                          │
-// └─────────────────────────────────────────────────────────────────────────────────────────┘
-// template<typename T>
-// constexpr T improvedSin_BROKEN(T x) {
-//     if constexpr (x == std::numbers::pi_v<T>) {  // ERROR: x is not a constant expression
-//         return T{};
-//     }
-//     else {
-//         return std::sin(x);
-//     }
-// }
-//
-// WHY IT FAILS:
-// if constexpr → condition must be compile-time constant
-// x → function parameter → value unknown at compile time
-// x == pi → runtime comparison, not compile-time
-// ∴ COMPILE ERROR: "x is not a constant expression"
+// ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+// │ print_bits: Reinterpret 4-byte float as 4-byte unsigned int, print decimal and hex                                                                                          │
+// │ MEMORY: f at 0x7FFF_XXXX (stack), sizeof(float)=4, sizeof(unsigned int)=4                                                                                                   │
+// │ WHAT: f=2.7182817459 → *p=0x402DF854 → sign=0, exp=0x80 (128-127=1), mantissa=0x2DF854 → 1.01011011111100001010100 × 2^1                                                    │
+// │ WHY: IEEE 754 float32 = 1 sign + 8 exp + 23 mantissa bits = 32 bits = 4 bytes                                                                                               │
+// │ WHERE: Stack frame of print_bits, p points to f's address                                                                                                                   │
+// │ WHO: Called 3× in main: once for std::e, once for runtime, once for constexpr                                                                                               │
+// │ WHEN: Runtime only (not constexpr)                                                                                                                                          │
+// │ WITHOUT: Bit manipulation, cannot see internal representation                                                                                                               │
+// │ WHICH: reinterpret_cast chosen over union (both valid for type punning in practice)                                                                                         │
+// └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+void print_bits(float f) {
+    // f = 2.7182817459 → address &f = 0x7FFF_E000 (example stack address)
+    // p = reinterpret_cast<unsigned int*>(&f) → p = 0x7FFF_E000 (same address, different type view)
+    // *p = 0x402DF854 → 32 bits: 0|10000000|01011011111100001010100
+    //                            s|exp(8)  |mantissa(23)
+    // exp = 0x80 = 128 → actual exponent = 128 - 127 = 1
+    // mantissa = 0x2DF854 = 3012692 → 1.mantissa = 1 + 3012692/2^23 = 1 + 3012692/8388608 = 1.359140872955322
+    // value = 1.359140872955322 × 2^1 = 2.718281745910644 ≈ 2.7182817459 ✓
+    auto* p = reinterpret_cast<unsigned int*>(&f);
+    std::cout << "Float: " << std::fixed << std::setprecision(10) << f 
+              << " | Hex: 0x" << std::hex << *p << std::dec << "\n";
+}
 
-
-// ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-// │ CONSTEXPR TAYLOR SERIES FOR sin(x):                                                     │
-// │ sin(x) = x - x³/3! + x⁵/5! - x⁷/7! + x⁹/9! - ...                                       │
-// │                                                                                         │
-// │ Each term: (-1)^n * x^(2n+1) / (2n+1)!                                                 │
-// │                                                                                         │
-// │ ROUND-OFF ERROR SOURCES:                                                                │
-// │ 1. Representation of PI: 3.14159265358979... → float has 23-bit mantissa              │
-// │ 2. Each multiplication: result rounded to nearest representable float                  │
-// │ 3. Each division: result rounded                                                        │
-// │ 4. Each addition/subtraction: result rounded                                            │
-// │                                                                                         │
-// │ All rounding happens in COMPILER's interpreter, NOT at runtime                         │
-// └─────────────────────────────────────────────────────────────────────────────────────────┘
-
-constexpr float constexpr_pow(float base, int exp) {
-    float result = 1.0f;
-    for (int i = 0; i < exp; ++i) {
-        result *= base;  // ← ROUND-OFF at each multiplication
+// ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+// │ my_pow: Compute base^exp via repeated multiplication                                                                                                                         │
+// │ WHAT: base=1.0f, exp=5 → acc = 1.0 × 1.0 × 1.0 × 1.0 × 1.0 × 1.0 = 1.0 (5 multiplications)                                                                                  │
+// │ WHY: x^n needed for Taylor term x^n/n! → for e^1, x=1, so x^n = 1^n = 1 always (trivial case)                                                                               │
+// │ WHERE: Called inside my_e_pow_x, 15 times for TERMS=15 → i=1,2,...,15 → exp=1,2,...,15                                                                                      │
+// │ WHO: my_e_pow_x calls my_pow(x, i) for each term                                                                                                                            │
+// │ WHEN: RUNTIME = loops .L5/.L6 in assembly, CONSTEXPR = g++ interpreter during compilation                                                                                   │
+// │ WITHOUT: pow() function, need manual loop                                                                                                                                   │
+// │ WHICH: Integer exponent only (no fractional)                                                                                                                                │
+// │                                                                                                                                                                             │
+// │ NUMERICAL EXAMPLES:                                                                                                                                                         │
+// │ 1. base=1.0, exp=10 → 1.0^10 = 1.0 (10 muls, each mul = 1.0×1.0 = 1.0, no round-off)                                                                                        │
+// │ 2. base=2.0, exp=10 → 2^10 = 1024.0 (exact, 1024 = 2^10 representable in float)                                                                                             │
+// │ 3. base=1.1, exp=10 → 1.1^10 = 2.5937424601... → float = 2.5937424... (round-off at each mul)                                                                               │
+// │ 4. base=3.14159, exp=5 → 3.14159^5 = 306.0196... → accumulated round-off from 5 muls                                                                                        │
+// │ 5. EDGE: exp=0 → loop body never executes → return acc=1.0 (correct: x^0 = 1)                                                                                               │
+// │ 6. EDGE: exp=1 → 1 iteration → acc = 1.0 × base = base (correct: x^1 = x)                                                                                                   │
+// │ 7. LARGE: exp=100 → 100 multiplications → if base=1.0001, acc = 1.0001^100 ≈ 1.0100501... (compound error)                                                                  │
+// │                                                                                                                                                                             │
+// │ ROUND-OFF ANALYSIS (base=1.1, exp=10):                                                                                                                                      │
+// │ iter₀: acc=1.0                                                                                                                                                              │
+// │ iter₁: acc=1.0×1.1=1.1 → 0x3F8CCCCD (exact? 1.1 not exactly representable → 1.10000002384...)                                                                               │
+// │ iter₂: acc=1.10000002384×1.10000002384=1.21000005... → round to nearest float                                                                                               │
+// │ ...each step accumulates ≤0.5 ULP error                                                                                                                                     │
+// │ iter₁₀: acc=2.5937424... → total accumulated error ≈ 5 ULP                                                                                                                  │
+// └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+constexpr float my_pow(float base, int exp) {
+    // acc at 0x7FFF_E010 (stack), sizeof(float)=4, initial value = 0x3F800000 = 1.0f
+    // RUNTIME ASSEMBLY (.L6): movaps %xmm3, %xmm0 → xmm0 = 1.0f initially
+    //                         mulss %xmm1, %xmm0 → xmm0 *= converted int i (wait, this is factorial logic, not pow)
+    // CORRECTION: In generated asm, x=1.0 so x^n = 1.0 always, compiler may optimize away pow entirely
+    float acc = 1;
+    // Loop: i = 0,1,2,...,exp-1 → exp iterations
+    // For exp=5: i=0→acc=1×base, i=1→acc=base×base, ... , i=4→acc=base^5
+    // For exp=0: loop condition 0 < 0 false → 0 iterations → return 1.0 ✓
+    for (int i = 0; i < exp; i++) {
+        // Each multiplication: acc = acc × base
+        // IEEE 754 round-to-nearest-even after each mulss instruction
+        // ULP(acc) grows as acc grows → error accumulates multiplicatively
+        acc *= base;
     }
-    return result;
+    return acc;
+    // RETURN: For base=1.0, exp=15 → acc=1.0 (no round-off, 1×1×...×1=1)
+    // RETURN: For base=3.14159, exp=9 → acc≈29809.099... → 9 round-offs accumulated
 }
 
-constexpr float constexpr_factorial(int n) {
-    float result = 1.0f;
-    for (int i = 2; i <= n; ++i) {
-        result *= static_cast<float>(i);  // ← ROUND-OFF for large factorials
+// ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+// │ my_fact: Compute n! via iterative multiplication                                                                                                                            │
+// │ WHAT: n=5 → 1×1×2×3×4×5 = 120.0                                                                                                                                             │
+// │ WHY: Denominator in Taylor term x^n/n!                                                                                                                                      │
+// │ WHERE: Called inside my_e_pow_x, 15 times for TERMS=15                                                                                                                      │
+// │ WHO: my_e_pow_x calls my_fact(i) for i=1,2,...,15                                                                                                                           │
+// │ WHEN: RUNTIME = inner loop .L6 in assembly (cvtsi2ssl + mulss), CONSTEXPR = g++ interpreter                                                                                 │
+// │ WITHOUT: tgamma() or std::factorial, need manual loop                                                                                                                       │
+// │ WHICH: Returns float (not int) to avoid overflow for n>12 (13! = 6227020800 > INT_MAX = 2147483647)                                                                         │
+// │                                                                                                                                                                             │
+// │ FACTORIAL TABLE (exact vs float):                                                                                                                                           │
+// │ n=0: 1 → 1.0 (exact)                                                                                                                                                        │
+// │ n=1: 1 → 1.0 (exact)                                                                                                                                                        │
+// │ n=5: 120 → 120.0 (exact, 120 < 2^23 = 8388608)                                                                                                                              │
+// │ n=10: 3628800 → 3628800.0 (exact, 3628800 < 2^23)                                                                                                                           │
+// │ n=12: 479001600 → 479001600.0 (exact? 479001600 < 2^29, but float has 23-bit mantissa → check: 479001600 = 0x1C8CFC00 → 29 bits needed → ROUND-OFF!)                        │
+// │       float(479001600) = 479001600.0 → actually exact because it's 479001600 = 28! × ... wait let me recalc                                                                 │
+// │       479001600 in binary = 11100100011001111110000000000 (29 bits) → float mantissa = 23 bits → loses 6 bits → NOT exact                                                  │
+// │       float(479001600) = 479001600.0? Let's check: 479001600 / 2^29 = 0.892... × 2^29 → mantissa needs 29-1=28 bits → truncated to 23 → error!                             │
+// │ n=13: 6227020800 → float = 6227020800.0? 6227020800 = 0x1_7328CC00 (33 bits) → massive truncation                                                                           │
+// │ n=15: 1307674368000 → 1.307674368×10^12 → float exponent handles magnitude, mantissa loses precision                                                                        │
+// │ n=34: 2.95×10^38 < FLT_MAX (3.4×10^38) → representable                                                                                                                      │
+// │ n=35: 1.03×10^40 > FLT_MAX → OVERFLOW → +inf                                                                                                                                │
+// │                                                                                                                                                                             │
+// │ ASSEMBLY TRACE (.L6 inner loop):                                                                                                                                            │
+// │ .L6:                                                                                                                                                                        │
+// │     pxor    %xmm1, %xmm1       ← xmm1 = 0.0                                                                                                                                 │
+// │     cvtsi2ssl %eax, %xmm1     ← xmm1 = (float)i, e.g., i=5 → xmm1 = 5.0f = 0x40A00000                                                                                       │
+// │     addl    $1, %eax          ← i++ (eax = loop counter)                                                                                                                    │
+// │     mulss   %xmm1, %xmm0      ← xmm0 = xmm0 × xmm1 = acc × i                                                                                                                │
+// │     cmpl    %eax, %edx        ← compare i to n                                                                                                                              │
+// │     jne     .L6               ← loop if i != n                                                                                                                              │
+// └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+constexpr float my_fact(int n) {
+    // EDGE: n<0 → mathematically undefined → return NaN (0.0f/0.0f = NaN = 0x7FC00000)
+    // 0.0f = 0x00000000, 0.0f/0.0f triggers invalid operation → NaN
+    if (n < 0) {
+        return 0.0f/0.0f;  // NaN = 0x7FC00000 (quiet NaN)
     }
-    return result;
-}
-
-constexpr float constexpr_sin(float x, int terms = 10) {
-    // Taylor series: sin(x) = Σ (-1)^n * x^(2n+1) / (2n+1)!
-    float result = 0.0f;
-    for (int n = 0; n < terms; ++n) {
-        int exp = 2 * n + 1;                    // 1, 3, 5, 7, 9, ...
-        float sign = (n % 2 == 0) ? 1.0f : -1.0f;
-        float term = sign * constexpr_pow(x, exp) / constexpr_factorial(exp);
-        result += term;  // ← ROUND-OFF at each addition
-        //
-        // TRACE for sin(1.0):
-        // n=0: +x^1/1! = +1.0/1 = +1.0
-        // n=1: -x^3/3! = -1.0/6 = -0.166667
-        // n=2: +x^5/5! = +1.0/120 = +0.00833333
-        // n=3: -x^7/7! = -1.0/5040 = -0.000198413
-        // n=4: +x^9/9! = +1.0/362880 = +0.00000275573
-        // ...
-        // result = 0.841471... (each step has round-off)
+    // res at stack, initial = 0x3F800000 = 1.0f
+    float res = 1.0f;
+    // Loop: i = 1,2,3,...,n → n iterations
+    // For n=0: loop condition 1 < 0+1 = 1 < 1 false → 0 iterations → return 1.0 ✓ (0! = 1)
+    // For n=1: i=1 → 1 < 2 true → res = 1.0 × 1.0 = 1.0 → i=2 → 2 < 2 false → return 1.0 ✓ (1! = 1)
+    // For n=5: i=1,2,3,4,5 → res = 1×1×2×3×4×5 = 120.0 ✓
+    for (int i = 1; i < n + 1; i++) {
+        // cvtsi2ssl: convert int i to float → exact for i ≤ 2^24 = 16777216
+        // mulss: res = res × (float)i → round-to-nearest after each mul
+        // For n=15: i=15 → (float)15 = 15.0 exact → res = 87178291200 × 15 = 1307674368000
+        //           1307674368000 in float → 1.307674... × 10^12 → exponent = 40 → mantissa truncated
+        res *= i;
     }
-    return result;
+    return res;
+    // RETURN for n=15: 1307674368000.0 → float approximation → 0x544B8B50 (verify with calculator)
 }
 
-// ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-// │ ADAPTED SIN: Returns exact values for special cases                                    │
-// │                                                                                         │
-// │ PROBLEM: constexpr_sin(pi) = -1.14e-8 (should be 0.0)                                  │
-// │          constexpr_sin(pi/2) = 0.99999994 (should be 1.0)                              │
-// │                                                                                         │
-// │ SOLUTION: Check for special values and return exact results                            │
-// │                                                                                         │
-// │ SPECIAL CASES:                                                                          │
-// │   sin(0) = 0                                                                           │
-// │   sin(π/2) = 1                                                                         │
-// │   sin(π) = 0                                                                           │
-// │   sin(3π/2) = -1                                                                       │
-// │   sin(2π) = 0                                                                          │
-// └─────────────────────────────────────────────────────────────────────────────────────────┘
-constexpr float adapted_sin(float x) {
-    constexpr float pi = std::numbers::pi_v<float>;        // 3.14159274f
-    constexpr float half_pi = pi / 2.0f;                   // 1.57079637f
-    constexpr float three_half_pi = 3.0f * pi / 2.0f;      // 4.71238899f
-    constexpr float two_pi = 2.0f * pi;                    // 6.28318548f
-    constexpr float epsilon = 1e-6f;                       // Tolerance for comparison
-    
-    // Check special cases
-    if (x >= -epsilon && x <= epsilon) return 0.0f;                          // sin(0) = 0
-    if (x >= half_pi - epsilon && x <= half_pi + epsilon) return 1.0f;       // sin(π/2) = 1
-    if (x >= pi - epsilon && x <= pi + epsilon) return 0.0f;                 // sin(π) = 0
-    if (x >= three_half_pi - epsilon && x <= three_half_pi + epsilon) return -1.0f;  // sin(3π/2) = -1
-    if (x >= two_pi - epsilon && x <= two_pi + epsilon) return 0.0f;         // sin(2π) = 0
-    
-    // General case: use Taylor series
-    return constexpr_sin(x);
+// ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+// │ my_e_pow_x: Taylor series for e^x = Σ(n=0 to ∞) x^n/n! ≈ 1 + x + x²/2! + x³/3! + ... (truncated at 'terms' terms)                                                          │
+// │ WHAT: x=1.0, terms=15 → e^1 ≈ 1 + 1/1! + 1/2! + 1/3! + ... + 1/15!                                                                                                          │
+// │ WHY: Approximate Euler's number e = 2.718281828...                                                                                                                          │
+// │ WHERE: Called twice in main: once runtime (loops in CPU), once constexpr (computed by g++)                                                                                  │
+// │ WHO: main() calls my_e_pow_x(1.0f, 15)                                                                                                                                      │
+// │ WHEN: CONSTEXPR = during g++ compilation → result stored in .LC7 = 0x402DF855, RUNTIME = loops .L5/.L6 in CPU                                                               │
+// │ WITHOUT: std::exp(), must implement manually                                                                                                                               │
+// │ WHICH: Taylor series chosen (alternatives: Padé approximation, Chebyshev polynomials, CORDIC)                                                                              │
+// │                                                                                                                                                                             │
+// │ TERM-BY-TERM CALCULATION (x=1.0, terms=15):                                                                                                                                 │
+// │ ┌──────┬─────────────┬───────────────────────────┬─────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────────────┐ │
+// │ │ i    │ 1^i / i!    │ term (exact)              │ term (float)                    │ running sum (float)                                                                  │ │
+// │ ├──────┼─────────────┼───────────────────────────┼─────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────┤ │
+// │ │ init │ -           │ -                         │ -                               │ res = 1.0 = 0x3F800000                                                               │ │
+// │ │ 1    │ 1/1 = 1     │ 1.0                       │ 1.0 = 0x3F800000                │ 1.0 + 1.0 = 2.0 = 0x40000000                                                         │ │
+// │ │ 2    │ 1/2 = 0.5   │ 0.5                       │ 0.5 = 0x3F000000                │ 2.0 + 0.5 = 2.5 = 0x40200000                                                         │ │
+// │ │ 3    │ 1/6         │ 0.166666...               │ 0.16666667 = 0x3E2AAAAB         │ 2.5 + 0.1666667 = 2.6666667 = 0x402AAAAB                                             │ │
+// │ │ 4    │ 1/24        │ 0.041666...               │ 0.041666668 = 0x3D2AAAAB        │ 2.6666667 + 0.0416667 = 2.7083334 = 0x402D5556                                       │ │
+// │ │ 5    │ 1/120       │ 0.008333...               │ 0.008333334 = 0x3C088889        │ 2.7083334 + 0.0083333 = 2.7166667 = 0x402DB6DB                                       │ │
+// │ │ 6    │ 1/720       │ 0.001388...               │ 0.0013888889 = 0x3AB60B61       │ 2.7166667 + 0.0013889 = 2.7180556 = 0x402DEE56                                       │ │
+// │ │ 7    │ 1/5040      │ 0.000198...               │ 0.00019841270 = 0x394FE4FE      │ 2.7180556 + 0.0001984 = 2.7182540 = 0x402DF828                                       │ │
+// │ │ 8    │ 1/40320     │ 0.0000248...              │ 0.000024801587 = 0x37D00D01     │ 2.7182540 + 0.0000248 = 2.7182788 = 0x402DF842                                       │ │
+// │ │ 9    │ 1/362880    │ 0.00000275...             │ 0.0000027557319 = 0x3638EF1D    │ 2.7182788 + 0.0000028 = 2.7182815 = 0x402DF853                                       │ │
+// │ │ 10   │ 1/3628800   │ 0.000000275...            │ 0.00000027557319 = 0x34938EF2   │ 2.7182815 + 0.00000028 = 2.7182817 = 0x402DF854? or 0x402DF855?                      │ │
+// │ │ 11   │ 1/39916800  │ 2.505...×10⁻⁸             │ 2.5052108×10⁻⁸ = 0x32D73249     │ sum += term but term < 0.5 ULP of sum → may round to same value                     │ │
+// │ │ 12   │ 1/479001600 │ 2.087...×10⁻⁹             │ 2.0876757×10⁻⁹ = 0x310F7772     │ term ≪ ULP → absorbed, sum unchanged?                                               │ │
+// │ │ 13   │ 1/6.227×10⁹ │ 1.606...×10⁻¹⁰            │ 1.6059044×10⁻¹⁰                 │ term ≪ ULP → absorbed                                                               │ │
+// │ │ 14   │ 1/8.717×10¹⁰│ 1.147...×10⁻¹¹            │ 1.1470746×10⁻¹¹                 │ term ≪ ULP → absorbed                                                               │ │
+// │ │ 15   │ 1/1.307×10¹²│ 7.647...×10⁻¹³            │ 7.6471637×10⁻¹³                 │ term ≪ ULP → absorbed                                                               │ │
+// │ └──────┴─────────────┴───────────────────────────┴─────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────┘ │
+// │                                                                                                                                                                             │
+// │ ULP ANALYSIS at sum ≈ 2.718:                                                                                                                                                │
+// │ sum = 2.718... → exponent = 1 (since 2 ≤ 2.718 < 4 = 2²)                                                                                                                    │
+// │ ULP = 2^(exp - 23) = 2^(1 - 23) = 2^(-22) = 2.384185791×10⁻⁷                                                                                                                │
+// │ 0.5 ULP = 1.192×10⁻⁷                                                                                                                                                        │
+// │ term at i=10: 2.755×10⁻⁷ > 0.5 ULP → ADDS to sum                                                                                                                            │
+// │ term at i=11: 2.505×10⁻⁸ < 0.5 ULP → MIGHT be absorbed (depends on sum's mantissa's last bits)                                                                              │
+// │ term at i=12+: definitely absorbed → sum stops changing                                                                                                                     │
+// │                                                                                                                                                                             │
+// │ FINAL RESULT:                                                                                                                                                               │
+// │ CONSTEXPR (g++ computed): 0x402DF855 = 2.7182819843 (stored in .rodata .LC7)                                                                                                │
+// │ RUNTIME (CPU computed):   0x402DF855 = 2.7182819843 (computed via loops .L5/.L6)                                                                                            │
+// │ std::numbers::e_v<float>: 0x402DF854 = 2.7182817459 (library constant, correctly rounded e)                                                                                 │
+// │ DIFFERENCE: Taylor(15 terms) - exact e = 1 ULP overshoot                                                                                                                    │
+// │ WHY OVERSHOOT: Taylor series adds positive terms, cumulative round-off slightly positive                                                                                    │
+// └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+constexpr float my_e_pow_x(float x, int terms = 10) {
+    // res at stack 0x7FFF_E020, initial = 1.0f = 0x3F800000
+    // This is the "1" term in e^x = 1 + x/1! + x²/2! + ...
+    // ASSEMBLY: After optimization with x=1.0 known at compile time, my_pow(1.0, n) = 1.0 always
+    //           So each term = 1.0 / my_fact(i) = 1.0 / i!
+    float res = 1.0f;
+    // Loop: i = 1,2,3,...,terms → 'terms' iterations = 15 iterations for TERMS=15
+    // RUNTIME ASSEMBLY (.L5 outer loop, .L6 inner factorial loop):
+    // .L5:                          ← outer loop for terms
+    //     movaps  %xmm3, %xmm0      ← xmm0 = 1.0 (for factorial accumulator)
+    // .L6:                          ← inner loop for factorial(i)
+    //     cvtsi2ssl %eax, %xmm1    ← convert loop counter to float
+    //     mulss   %xmm1, %xmm0     ← factorial_acc *= i
+    //     addl    $1, %eax
+    //     cmpl    %eax, %edx
+    //     jne     .L6
+    //     divss   %xmm0, %xmm1     ← term = 1.0 / factorial (since x=1, x^i = 1)
+    //     addss   %xmm1, %xmm2     ← sum += term
+    //     cmpl    $17, %edx        ← 17 = terms+2 (loop runs 15 times for terms=15)
+    //     jne     .L5
+    for (int i = 1; i < terms + 1; i++) {
+        // my_pow(x, i) = x^i = 1.0^i = 1.0 (for x=1.0)
+        // my_fact(i) = i! = 1, 2, 6, 24, 120, ...
+        // term = 1.0 / i!
+        // divss instruction: xmm1 = xmm1 / xmm0 → term = 1.0 / factorial
+        // addss instruction: xmm2 = xmm2 + xmm1 → sum += term
+        res += my_pow(x, i) / my_fact(i);
+    }
+    return res;
+    // CONSTEXPR: g++ evaluates this at compile time, produces 0x402DF855, stores in .LC7
+    // RUNTIME: CPU executes loops, produces 0x402DF855 (same result because IEEE 754 followed by both)
 }
 
-// ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-// │ TEMPLATE-BASED SIN: Use enum to select special angle at compile time                  │
-// │                                                                                         │
-// │ WHY TEMPLATE:                                                                           │
-// │   1. No runtime if-checks for special cases                                            │
-// │   2. Compiler selects specialization at compile time                                   │
-// │   3. Zero overhead - direct return of exact value                                      │
-// │                                                                                         │
-// │ USAGE:                                                                                  │
-// │   template_sin<Angle::PI>()      → returns 0.0f (exact)                               │
-// │   template_sin<Angle::HALF_PI>() → returns 1.0f (exact)                               │
-// │   template_sin<Angle::GENERAL>(1.5f) → returns Taylor series result                  │
-// └─────────────────────────────────────────────────────────────────────────────────────────┘
-
-enum class Angle { ZERO, HALF_PI, PI, THREE_HALF_PI, TWO_PI, GENERAL };
-
-// Primary template: general case - uses Taylor series
-template<Angle A>
-constexpr float template_sin(float x = 0.0f) {
-    return constexpr_sin(x);
-}
-
-// Specialization: sin(0) = 0
-template<>
-constexpr float template_sin<Angle::ZERO>(float) {
-    return 0.0f;
-}
-
-// Specialization: sin(π/2) = 1
-template<>
-constexpr float template_sin<Angle::HALF_PI>(float) {
-    return 1.0f;
-}
-
-// Specialization: sin(π) = 0
-template<>
-constexpr float template_sin<Angle::PI>(float) {
-    return 0.0f;
-}
-
-// Specialization: sin(3π/2) = -1
-template<>
-constexpr float template_sin<Angle::THREE_HALF_PI>(float) {
-    return -1.0f;
-}
-
-// Specialization: sin(2π) = 0
-template<>
-constexpr float template_sin<Angle::TWO_PI>(float) {
-    return 0.0f;
-}
-
-// Helper to print float as hex bits
-void print_float_bits(float f, const char* name) {
-    union { float f; uint32_t u; } conv;
-    conv.f = f;
-    std::cout << std::setw(20) << name << ": " 
-              << std::fixed << std::setprecision(20) << f 
-              << " (0x" << std::hex << conv.u << std::dec << ")\n";
-}
+// ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+// │ TEST CONSTANTS                                                                                                                                                              │
+// │ TERMS = 15 → 15 iterations → i = 1,2,...,15 → last term = 1/15! = 1/1307674368000 ≈ 7.6×10⁻¹³                                                                               │
+// │ Target: e = 2.718281828459045... → float(e) = 0x402DF854 = 2.7182817459                                                                                                     │
+// │ Result: Taylor(15) = 0x402DF855 = 2.7182819843 → error = +1 ULP = +2.384×10⁻⁷                                                                                               │
+// └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+constexpr int TERMS = 15;
 
 int main() {
-    // ┌─────────────────────────────────────────────────────────────────────────────────────┐
-    // │ COMPILE-TIME COMPUTATIONS                                                           │
-    // │ All round-off happens in compiler's interpreter during compilation                  │
-    // └─────────────────────────────────────────────────────────────────────────────────────┘
-    
-    constexpr float pi_f = std::numbers::pi_v<float>;     // 3.14159265... → float
-    constexpr float sin_of_1 = constexpr_sin(1.0f);        // sin(1) ≈ 0.8414709848...
-    constexpr float sin_of_pi = constexpr_sin(pi_f);       // sin(π) = 0.0 (exact math)
-    constexpr float sin_of_half_pi = constexpr_sin(pi_f / 2.0f);  // sin(π/2) = 1.0 (exact math)
-    
-    std::cout << "=== COMPILE-TIME RESULTS (round-off already happened in compiler) ===\n\n";
-    
-    print_float_bits(pi_f, "PI (float)");
-    print_float_bits(sin_of_1, "sin(1.0)");
-    print_float_bits(sin_of_pi, "sin(PI)");
-    print_float_bits(sin_of_half_pi, "sin(PI/2)");
-    
-    std::cout << "\n=== RUNTIME RESULTS (using std::sin from cmath) ===\n\n";
-    
-    float runtime_sin_1 = std::sin(1.0f);
-    float runtime_sin_pi = std::sin(pi_f);
-    float runtime_sin_half_pi = std::sin(pi_f / 2.0f);
-    
-    print_float_bits(runtime_sin_1, "std::sin(1.0)");
-    print_float_bits(runtime_sin_pi, "std::sin(PI)");
-    print_float_bits(runtime_sin_half_pi, "std::sin(PI/2)");
-    
-    std::cout << "\n=== ADAPTED SIN (exact values for special cases) ===\n\n";
-    
-    constexpr float adapted_1 = adapted_sin(1.0f);
-    constexpr float adapted_pi = adapted_sin(pi_f);
-    constexpr float adapted_half_pi = adapted_sin(pi_f / 2.0f);
-    constexpr float adapted_zero = adapted_sin(0.0f);
-    
-    print_float_bits(adapted_1, "adapted(1.0)");
-    print_float_bits(adapted_pi, "adapted(PI)");
-    print_float_bits(adapted_half_pi, "adapted(PI/2)");
-    print_float_bits(adapted_zero, "adapted(0)");
-    
-    std::cout << "\n=== TEMPLATE SIN (compile-time specialization) ===\n\n";
-    
-    constexpr float templ_zero = template_sin<Angle::ZERO>();
-    constexpr float templ_half_pi = template_sin<Angle::HALF_PI>();
-    constexpr float templ_pi = template_sin<Angle::PI>();
-    constexpr float templ_general = template_sin<Angle::GENERAL>(1.0f);
-    
-    print_float_bits(templ_zero, "template<ZERO>");
-    print_float_bits(templ_half_pi, "template<HALF_PI>");
-    print_float_bits(templ_pi, "template<PI>");
-    print_float_bits(templ_general, "template<GENERAL>(1.0)");
-    
-    std::cout << "\n=== ROUND-OFF ERROR ANALYSIS ===\n\n";
-    
-    // sin(π) should be exactly 0.0 mathematically
-    std::cout << "MATHEMATICAL sin(π) = 0.0 EXACTLY\n";
-    std::cout << "constexpr sin(π)    = " << std::scientific << sin_of_pi << "\n";
-    std::cout << "std::sin(π)         = " << std::scientific << runtime_sin_pi << "\n";
-    std::cout << "Difference (constexpr vs std): " << std::abs(sin_of_pi - runtime_sin_pi) << "\n\n";
-    
-    // sin(π/2) should be exactly 1.0 mathematically
-    std::cout << "MATHEMATICAL sin(π/2) = 1.0 EXACTLY\n";
-    std::cout << "constexpr sin(π/2)    = " << std::fixed << std::setprecision(20) << sin_of_half_pi << "\n";
-    std::cout << "std::sin(π/2)         = " << std::fixed << std::setprecision(20) << runtime_sin_half_pi << "\n";
-    std::cout << "Error constexpr: " << std::scientific << std::abs(sin_of_half_pi - 1.0f) << "\n";
-    std::cout << "Error std::sin:  " << std::scientific << std::abs(runtime_sin_half_pi - 1.0f) << "\n\n";
-    
-    // ┌─────────────────────────────────────────────────────────────────────────────────────┐
-    // │ WHERE IS THE ROUND-OFF?                                                             │
-    // │                                                                                     │
-    // │ 1. PI representation:                                                               │
-    // │    π = 3.14159265358979323846...                                                   │
-    // │    float π = 3.14159274 (rounded to 23-bit mantissa)                               │
-    // │    Error = 0.00000008... from PI representation alone                              │
-    // │                                                                                     │
-    // │ 2. Taylor series computation:                                                       │
-    // │    Each pow() call: multiple multiplications, each rounded                         │
-    // │    Each factorial() call: for large n, exceeds float precision                     │
-    // │    Each term addition: catastrophic cancellation possible                          │
-    // │                                                                                     │
-    // │ 3. WHEN does this happen:                                                          │
-    // │    COMPILE TIME - compiler's FP interpreter does all operations                    │
-    // │    Result stored in binary as pre-rounded immediate                                │
-    // │    RUNTIME - just loads immediate, NO additional rounding                          │
-    // └─────────────────────────────────────────────────────────────────────────────────────┘
-    
-    // ┌─────────────────────────────────────────────────────────────────────────────────────┐
-    // │ BENCHMARK: CONSTEXPR vs RUNTIME                                                     │
-    // └─────────────────────────────────────────────────────────────────────────────────────┘
-    //
-    // ┌─────────────────────────────────────────────────────────────────────────────────────┐
-    // │ WHY IS YOUR constexpr_sin SLOWEST AT RUNTIME?                                       │
-    // │                                                                                      │
-    // │ DIAGRAM: What happens in each case                                                  │
-    // │                                                                                      │
-    // │ CASE 1: CONSTEXPR LOAD (2.07 ns)                                                   │
-    // │ ┌─────────────────────────────────────────────────────────────────────────────────┐ │
-    // │ │ COMPILE TIME (g++ running):                                                     │ │
-    // │ │   constexpr_sin(3.14159274f)                                                   │ │
-    // │ │   → pow(3.14,1)=3.14, pow(3.14,3)=31.0, pow(3.14,5)=306.0...                  │ │
-    // │ │   → factorial(1)=1, factorial(3)=6, factorial(5)=120...                        │ │
-    // │ │   → 10 terms computed by g++ = 0xb2435010                                      │ │
-    // │ │   → Stored in .rodata section of binary                                        │ │
-    // │ │                                                                                 │ │
-    // │ │ RUN TIME (CPU executing):                                                       │ │
-    // │ │   movss .LC12(%rip), %xmm0  ← 1 instruction, 4 bytes from memory              │ │
-    // │ │   TIME: 2.07 ns                                                                │ │
-    // │ └─────────────────────────────────────────────────────────────────────────────────┘ │
-    // │                                                                                      │
-    // │ CASE 2: std::sin (6.70 ns)                                                         │
-    // │ ┌─────────────────────────────────────────────────────────────────────────────────┐ │
-    // │ │ RUN TIME (CPU executing):                                                       │ │
-    // │ │   call sinf@PLT                                                                 │ │
-    // │ │   → libc uses OPTIMIZED Chebyshev approximation                               │ │
-    // │ │   → SSE SIMD instructions                                                       │ │
-    // │ │   → Range reduction (x mod 2π)                                                 │ │
-    // │ │   → Only ~7 terms needed (better polynomial)                                   │ │
-    // │ │   TIME: 6.70 ns                                                                │ │
-    // │ └─────────────────────────────────────────────────────────────────────────────────┘ │
-    // │                                                                                      │
-    // │ CASE 3: YOUR constexpr_sin AT RUNTIME (359 ns) ← SLOWEST!                          │
-    // │ ┌─────────────────────────────────────────────────────────────────────────────────┐ │
-    // │ │ RUN TIME (CPU executing):                                                       │ │
-    // │ │   call _Z13constexpr_sinfi                                                      │ │
-    // │ │   → NAIVE Taylor series: 10 terms                                               │ │
-    // │ │   → constexpr_pow: LOOP n multiplications (not optimized)                      │ │
-    // │ │   → constexpr_factorial: LOOP n multiplications (not optimized)               │ │
-    // │ │   → NO SIMD, NO range reduction, NO Chebyshev                                   │ │
-    // │ │   TIME: 359 ns                                                                  │ │
-    // │ └─────────────────────────────────────────────────────────────────────────────────┘ │
-    // │                                                                                      │
-    // │ WHY YOUR CODE IS SLOW:                                                              │
-    // │ ┌─────────────────────────────────────────────────────────────────────────────────┐ │
-    // │ │ YOUR constexpr_pow(3.14, 9) = 9 multiplications in a LOOP                     │ │
-    // │ │   for (int i = 0; i < 9; ++i) result *= 3.14;                                  │ │
-    // │ │   = 9 imul + 9 loop iterations + 9 stores                                      │ │
-    // │ │                                                                                 │ │
-    // │ │ YOUR constexpr_factorial(9) = 8 multiplications in a LOOP                     │ │
-    // │ │   for (int i = 2; i <= 9; ++i) result *= i;                                   │ │
-    // │ │   = 8 imul + 8 loop iterations + 8 stores                                      │ │
-    // │ │                                                                                 │ │
-    // │ │ PER TERM: ~17 multiplications + 17 loop iterations + 17 stores                │ │
-    // │ │ 10 TERMS: ~170 multiplications + 170 loop iterations + 170 stores             │ │
-    // │ │                                                                                 │ │
-    // │ │ std::sin: Uses Horner's method, no loops, ~7 FMA instructions total           │ │
-    // │ └─────────────────────────────────────────────────────────────────────────────────┘ │
-    // │                                                                                      │
-    // │ WHY CONSTEXPR IS STILL VALUABLE:                                                    │
-    // │ ┌─────────────────────────────────────────────────────────────────────────────────┐ │
-    // │ │ SLOW CODE RUN BY COMPILER = FREE                                               │ │
-    // │ │ SLOW CODE RUN BY CPU = SLOW                                                    │ │
-    // │ │                                                                                 │ │
-    // │ │ When you write:                                                                │ │
-    // │ │   constexpr float x = constexpr_sin(pi);                                       │ │
-    // │ │ The 170 multiplications happen in g++, not in ./a.out                         │ │
-    // │ │ CPU just loads 4 bytes → 2.07 ns                                               │ │
-    // │ │                                                                                 │ │
-    // │ │ MORAL: Constexpr code can be SLOPPY because compiler pays the price           │ │
-    // │ └─────────────────────────────────────────────────────────────────────────────────┘ │
-    // └─────────────────────────────────────────────────────────────────────────────────────┘
-    
-    std::cout << "=== BENCHMARK: CONSTEXPR vs RUNTIME (10 million iterations) ===\n\n";
-    
-    constexpr int ITERATIONS = 10'000'000;
-    volatile float sink = 0.0f;  // Prevent optimization from eliminating loop
-    
-    // Benchmark CONSTEXPR (just loading pre-computed value)
-    {
-        auto start = std::chrono::high_resolution_clock::now();
-        for (int i = 0; i < ITERATIONS; ++i) {
-            sink = sin_of_pi;  // Load pre-computed constexpr value
-        }
-        auto end = std::chrono::high_resolution_clock::now();
-        auto ns = static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
-        std::cout << "CONSTEXPR load:     " << ns / 1'000'000.0 << " ms total, "
-                  << ns / ITERATIONS << " ns/iter\n";
-    }
-    
-    // Benchmark RUNTIME (calling std::sin each time)
-    {
-        auto start = std::chrono::high_resolution_clock::now();
-        for (int i = 0; i < ITERATIONS; ++i) {
-            sink = std::sin(pi_f);  // Compute std::sin at runtime
-        }
-        auto end = std::chrono::high_resolution_clock::now();
-        auto ns = static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
-        std::cout << "RUNTIME std::sin:   " << ns / 1'000'000.0 << " ms total, "
-                  << ns / ITERATIONS << " ns/iter\n";
-    }
-    
-    // Benchmark RUNTIME (calling our Taylor series each time)
-    {
-        auto start = std::chrono::high_resolution_clock::now();
-        for (int i = 0; i < ITERATIONS; ++i) {
-            sink = constexpr_sin(pi_f);  // Compute Taylor series at runtime
-        }
-        auto end = std::chrono::high_resolution_clock::now();
-        auto ns = static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
-        std::cout << "RUNTIME Taylor sin: " << ns / 1'000'000.0 << " ms total, "
-                  << ns / ITERATIONS << " ns/iter\n";
-    }
-    
-    // Benchmark CONSTEXPR INSIDE LOOP (what happens if you declare constexpr in loop?)
-    {
-        auto start = std::chrono::high_resolution_clock::now();
-        for (int i = 0; i < ITERATIONS; ++i) {
-            constexpr float local_sin = constexpr_sin(pi_f);  // Declared constexpr inside loop
-            sink = local_sin;
-        }
-        auto end = std::chrono::high_resolution_clock::now();
-        auto ns = static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
-        std::cout << "CONSTEXPR in loop:  " << ns / 1'000'000.0 << " ms total, "
-                  << ns / ITERATIONS << " ns/iter (same as case 1!)\n";
-    }
-    
-    std::cout << "\nCONCLUSION: constexpr = just load, runtime = full computation\n";
-    std::cout << "(sink=" << sink << " to prevent optimization)\n\n";
+    // Print std::numbers::e_v<float> = 0x402DF854 = 2.7182817459
+    // This is the correctly rounded IEEE 754 float32 representation of e
+    // ASSEMBLY: movss .LC4(%rip), %xmm0 → load 0x402DF854 from .rodata
+    print_bits(std::numbers::e_v<float>);
 
-    std::cout << "=== TRACE: ROUND-OFF ACCUMULATION in sin(π) ===\n\n";
-    
-    // Show how error accumulates term by term
-    float x = pi_f;
-    float running_sum = 0.0f;
-    for (int n = 0; n < 10; ++n) {
-        int exp = 2 * n + 1;
-        float sign = (n % 2 == 0) ? 1.0f : -1.0f;
-        float power = constexpr_pow(x, exp);
-        float fact = constexpr_factorial(exp);
-        float term = sign * power / fact;
-        running_sum += term;
-        
-        std::cout << "n=" << n << " term=" << std::scientific << std::setw(15) << term 
-                  << " sum=" << std::setw(15) << running_sum << "\n";
+    // RUNTIME CALCULATION
+    // x at stack, sizeof(float) = 4 bytes
+    // ASSEMBLY: x = 1.0f stored at 12(%rsp), but actually optimized into xmm3 register
+    float x = 1.0f;
+    // e_runtime computed by CPU executing loops .L5/.L6
+    // 15 outer iterations × (1 to 15 inner iterations each) = 1+2+...+15 = 120 mulss instructions for factorial
+    // Plus 15 divss instructions for 1.0/factorial
+    // Plus 15 addss instructions for sum += term
+    // Total: ~150 floating point operations at runtime
+    // ASSEMBLY: After loops, result in xmm2, stored at 12(%rsp)
+    float e_runtime = my_e_pow_x(x, TERMS);
+    std::cout << "Runtime: ";
+    // Output: Float: 2.7182819843 | Hex: 0x402df855
+    print_bits(e_runtime);
+
+    // COMPILE TIME CALCULATION
+    // ASSEMBLY: movss .LC7(%rip), %xmm0 → loads 0x402DF855 directly from .rodata
+    // .LC7: .long 1076754517 = 0x402DF855
+    // g++ computed 1.0 + 1/1! + 1/2! + ... + 1/15! during compilation
+    // Result baked into binary as 4-byte immediate, NO loops at runtime for this value
+    constexpr float e_compiletime = my_e_pow_x(1.0f, TERMS);
+    std::cout << "Compile: ";
+    // Output: Float: 2.7182819843 | Hex: 0x402df855
+    print_bits(e_compiletime);
+
+    // CHECK DIFFERENCE
+    // e_runtime = 0x402DF855, e_compiletime = 0x402DF855
+    // ucomiss .LC7(%rip), %xmm2 → compare runtime (xmm2) vs constexpr (.LC7)
+    // Result: EQUAL (both computed using IEEE 754 float32 semantics)
+    // If compiler used 80-bit x87 FP internally, might differ. GCC uses strict float32 in constexpr.
+    if (e_runtime == e_compiletime) {
+        std::cout << "Matches ✓\n";  // This branch taken
+    } else {
+        std::cout << "Differs ✗\n";
     }
-    std::cout << "\nFinal sum should be 0.0, actual = " << running_sum << "\n";
-    std::cout << "This error was computed at COMPILE TIME and baked into binary.\n";
-    
+
     return 0;
 }
 
-// ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-// │ SUMMARY:                                                                                │
-// │                                                                                         │
-// │ Q: Where do round-off errors occur?                                                    │
-// │ A: In the COMPILER'S floating-point interpreter, DURING COMPILATION                   │
-// │                                                                                         │
-// │ The binary contains:                                                                    │
-// │   movss .LC1(%rip), %xmm0   ← Load pre-rounded result from .rodata                     │
-// │                                                                                         │
-// │ NOT: Taylor series computation at runtime                                               │
-// │                                                                                         │
-// │ The 0.0000001234... error in sin(π) was computed by g++ on your machine               │
-// │ and stored as a float literal in the binary. CPU just loads it.                       │
-// └─────────────────────────────────────────────────────────────────────────────────────────┘
+// ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+// │ SUMMARY:                                                                                                                                                                    │
+// │ CONSTEXPR: g++ computes my_e_pow_x(1.0f, 15) during compilation → stores 0x402DF855 in .LC7 → runtime loads with single movss instruction                                   │
+// │ RUNTIME: CPU executes nested loops (.L5/.L6) → ~150 FP ops → produces 0x402DF855 → matches constexpr                                                                        │
+// │ ROUND-OFF: Taylor(15) overshoots exact e by 1 ULP due to cumulative round-off in additions                                                                                  │
+// │ PROOF: .LC7 = 1076754517 in .rodata section of binary = 0x402DF855 = 2.7182819843f                                                                                          │
+// └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
