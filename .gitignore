@@ -1,3 +1,7 @@
+# Agent configuration (private)
+.agent/
+.gemini/
+
 # Build output
 build/
 cmake-build-*/
