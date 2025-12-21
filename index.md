@@ -6,7 +6,7 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 
 | ID | Title                                      | Source / Note                                      | Status      |
 |:---|:-------------------------------------------|:---------------------------------------------------|:------------|
-| 16 | Smart Pointers                             | [36_smart_pointer_factory.md](src/36_smart_pointer_factory.md) | Done        |
+| 16 | Smart Pointers                             | [36_smart_pointer_factory.md](https://github.com/raikrahul/data_cpp/blob/master/src/36_smart_pointer_factory.md) | Done        |
 | 17 | Endianness                                 | [Conversation Log]                                 | Done        |
 | 18 | T9 Predictive Text                         | [T9 Problem]                                       | Done        |
 | 19 | Containers Worksheet                       | [containers_worksheet.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/containers_worksheet.cpp) | Done        |
@@ -26,12 +26,12 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 | 33 | Ranges Views Memory Layout                 | [33_ranges_views_memory.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/33_ranges_views_memory.cpp) | In Progress |
 | 34 | View Abstraction Layer                     | [34_view_abstraction.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/34_view_abstraction.cpp) | In Progress |
 | 35 | Iota View Formula                          | [35_iota_view_formula.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/35_iota_view_formula.cpp) | Done        |
-| 36 | Smart Pointer Factory                      | [36_smart_pointer_factory.md](src/36_smart_pointer_factory.md) | In Progress |
-| 37 | Struct/Class Init & Memory                 | [37_struct_class_init.md](src/37_struct_class_init.md) | In Progress |
-| 38 | Functor vs Lambda State                    | [38_functor_vs_lambda.md](src/38_functor_vs_lambda.md) | In Progress |
-| 39 | Auto Type Deduction & Copy                 | [39_auto_type_deduction.md](src/39_auto_type_deduction.md) | In Progress |
-| 40 | Person Name Compare Traps                  | [40_person_name_compare.md](src/40_person_name_compare.md) | In Progress |
-| 41 | Inheritance & Virtual Dispatch             | [41_inheritance_virtual.md](src/41_inheritance_virtual.md) | In Progress |
+| 36 | Smart Pointer Factory                      | [36_smart_pointer_factory.md](https://github.com/raikrahul/data_cpp/blob/master/src/36_smart_pointer_factory.md) | In Progress |
+| 37 | Struct/Class Init & Memory                 | [37_struct_class_init.md](https://github.com/raikrahul/data_cpp/blob/master/src/37_struct_class_init.md) | In Progress |
+| 38 | Functor vs Lambda State                    | [38_functor_vs_lambda.md](https://github.com/raikrahul/data_cpp/blob/master/src/38_functor_vs_lambda.md) | In Progress |
+| 39 | Auto Type Deduction & Copy                 | [39_auto_type_deduction.md](https://github.com/raikrahul/data_cpp/blob/master/src/39_auto_type_deduction.md) | In Progress |
+| 40 | Person Name Compare Traps                  | [40_person_name_compare.md](https://github.com/raikrahul/data_cpp/blob/master/src/40_person_name_compare.md) | In Progress |
+| 41 | Inheritance & Virtual Dispatch             | [41_inheritance_virtual.md](https://github.com/raikrahul/data_cpp/blob/master/src/41_inheritance_virtual.md) | In Progress |
 | 42 | No Virtual Assembly                        | [42_no_virtual_assembly.s](https://github.com/raikrahul/data_cpp/blob/master/src/42_no_virtual_assembly.s) | Done        |
 | 43 | Non-Virtual Calls Virtual                  | [43_nonvirtual_calls_virtual.s](https://github.com/raikrahul/data_cpp/blob/master/src/43_nonvirtual_calls_virtual.s) | Done        |
 | 44 | Assembly Virtual Dispatch                  | [44_assembly_virtual_dispatch.s](https://github.com/raikrahul/data_cpp/blob/master/src/44_assembly_virtual_dispatch.s) | Done        |
@@ -43,11 +43,11 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 | 50 | Abbreviated Duck Typing                    | [50_abbreviated_duck_typing.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/50_abbreviated_duck_typing.cpp) | Done        |
 | 51 | Missing size() Error                       | [51_missing_size_error.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/51_missing_size_error.cpp) | Done        |
 | 52 | All Syntax Versions                        | [52_all_syntax_versions.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/52_all_syntax_versions.cpp) | Done        |
-| 53 | C++ Templates Worksheet                    | [53_cpp_templates_worksheet.md](src/53_cpp_templates_worksheet.md) | Done        |
+| 53 | C++ Templates Worksheet                    | [53_cpp_templates_worksheet.md](https://github.com/raikrahul/data_cpp/blob/master/src/53_cpp_templates_worksheet.md) | Done        |
 | 54 | Recursive Template Assembly                | [54_recursive_template_asm.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/54_recursive_template_asm.cpp) | Done        |
 | 55 | Template Dimensions struct                 | [55_template_dimensions.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/55_template_dimensions.cpp) | Done        |
 | 56 | N-Dimensional Logic                        | [56_n_dimensional_logic.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/56_n_dimensional_logic.cpp) | Done        |
-| 57 | Swap Evolution (Mechanical Chain)          | [57_swap_evolution.md](src/57_swap_evolution.md) | Done        |
+| 57 | Swap Evolution (Mechanical Chain)          | [57_swap_evolution.md](https://github.com/raikrahul/data_cpp/blob/master/src/57_swap_evolution.md) | Done        |
 
 ## Build and Run
 
