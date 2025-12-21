@@ -49,6 +49,7 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 | 56 | N-Dimensional Logic                        | [56_n_dimensional_logic.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/56_n_dimensional_logic.cpp) | Done        |
 | 57 | Swap Evolution (Mechanical Chain)          | [57_swap_evolution.md](https://github.com/raikrahul/data_cpp/blob/master/src/57_swap_evolution.md) | Done        |
 | 58 | Constexpr Computation                      | [58_constexpr_derivation.md](https://github.com/raikrahul/data_cpp/blob/master/src/58_constexpr_derivation.md) | Done        |
+| 59 | Constexpr Compiler Interpreter             | [59_constexpr_compiler_interpreter.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/59_constexpr_compiler_interpreter.cpp) | Done        |
 
 ## Build and Run
 
