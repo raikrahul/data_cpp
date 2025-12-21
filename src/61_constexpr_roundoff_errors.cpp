@@ -99,6 +99,58 @@ constexpr float adapted_sin(float x) {
     return constexpr_sin(x);
 }
 
+// ┌─────────────────────────────────────────────────────────────────────────────────────────┐
+// │ TEMPLATE-BASED SIN: Use enum to select special angle at compile time                  │
+// │                                                                                         │
+// │ WHY TEMPLATE:                                                                           │
+// │   1. No runtime if-checks for special cases                                            │
+// │   2. Compiler selects specialization at compile time                                   │
+// │   3. Zero overhead - direct return of exact value                                      │
+// │                                                                                         │
+// │ USAGE:                                                                                  │
+// │   template_sin<Angle::PI>()      → returns 0.0f (exact)                               │
+// │   template_sin<Angle::HALF_PI>() → returns 1.0f (exact)                               │
+// │   template_sin<Angle::GENERAL>(1.5f) → returns Taylor series result                  │
+// └─────────────────────────────────────────────────────────────────────────────────────────┘
+
+enum class Angle { ZERO, HALF_PI, PI, THREE_HALF_PI, TWO_PI, GENERAL };
+
+// Primary template: general case - uses Taylor series
+template<Angle A>
+constexpr float template_sin(float x = 0.0f) {
+    return constexpr_sin(x);
+}
+
+// Specialization: sin(0) = 0
+template<>
+constexpr float template_sin<Angle::ZERO>(float) {
+    return 0.0f;
+}
+
+// Specialization: sin(π/2) = 1
+template<>
+constexpr float template_sin<Angle::HALF_PI>(float) {
+    return 1.0f;
+}
+
+// Specialization: sin(π) = 0
+template<>
+constexpr float template_sin<Angle::PI>(float) {
+    return 0.0f;
+}
+
+// Specialization: sin(3π/2) = -1
+template<>
+constexpr float template_sin<Angle::THREE_HALF_PI>(float) {
+    return -1.0f;
+}
+
+// Specialization: sin(2π) = 0
+template<>
+constexpr float template_sin<Angle::TWO_PI>(float) {
+    return 0.0f;
+}
+
 // Helper to print float as hex bits
 void print_float_bits(float f, const char* name) {
     union { float f; uint32_t u; } conv;
@@ -147,6 +199,18 @@ int main() {
     print_float_bits(adapted_pi, "adapted(PI)");
     print_float_bits(adapted_half_pi, "adapted(PI/2)");
     print_float_bits(adapted_zero, "adapted(0)");
+    
+    std::cout << "\n=== TEMPLATE SIN (compile-time specialization) ===\n\n";
+    
+    constexpr float templ_zero = template_sin<Angle::ZERO>();
+    constexpr float templ_half_pi = template_sin<Angle::HALF_PI>();
+    constexpr float templ_pi = template_sin<Angle::PI>();
+    constexpr float templ_general = template_sin<Angle::GENERAL>(1.0f);
+    
+    print_float_bits(templ_zero, "template<ZERO>");
+    print_float_bits(templ_half_pi, "template<HALF_PI>");
+    print_float_bits(templ_pi, "template<PI>");
+    print_float_bits(templ_general, "template<GENERAL>(1.0)");
     
     std::cout << "\n=== ROUND-OFF ERROR ANALYSIS ===\n\n";
     
