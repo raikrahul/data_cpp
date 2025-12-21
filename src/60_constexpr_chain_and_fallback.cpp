@@ -108,33 +108,90 @@ int main() {
 }
 
 // ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-// │ EXPECTED ASSEMBLY (compile-time cases):                                                 │
+// │ REAL ASSEMBLY FROM YOUR MACHINE (g++ -O2 -std=c++20 -fno-inline):                       │
+// │                                                                                         │
+// │ === COMPILE-TIME CASES (in main) ===                                                    │
 // │                                                                                         │
 // │ constexpr int a = cube(3):                                                              │
 // │   NO call to cube()                                                                     │
 // │   NO call to square()                                                                   │
-// │   JUST: movl $27, %esi                                                                  │
+// │   JUST: movl    $27, %esi   ← 0x1B = 27 = 3³ BAKED                                      │
 // │                                                                                         │
 // │ constexpr int b = sum_of_cubes(2,3):                                                    │
 // │   NO call to sum_of_cubes()                                                             │
 // │   NO call to cube() (twice)                                                             │
 // │   NO call to square() (twice)                                                           │
-// │   JUST: movl $35, %esi                                                                  │
+// │   JUST: movl    $35, %esi   ← 0x23 = 35 = 8+27 BAKED                                    │
 // │                                                                                         │
-// │ ENTIRE CHAIN of 5 function calls → 1 immediate value                                   │
+// │ ENTIRE CHAIN of 5 function calls → 2 immediate values                                  │
 // ├─────────────────────────────────────────────────────────────────────────────────────────┤
-// │ EXPECTED ASSEMBLY (runtime cases):                                                      │
+// │ === RUNTIME CASES (with cin input x,y) ===                                              │
 // │                                                                                         │
 // │ int c = cube(x):                                                                        │
-// │   movl (%rsp), %edi        ← Load x from stack                                         │
-// │   call _Z4cubei            ← Actual function call                                       │
-// │   movl %eax, (%rsp+4)      ← Store result in c                                          │
+// │   movl    (%rsp), %r12d       ← Load x from stack (offset 0)                            │
+// │   movl    %r12d, %edi         ← Copy x to arg register                                  │
+// │   call    _Z4cubei            ← Actual call to cube(x)                                  │
+// │   movl    %eax, %r14d         ← Store result in r14d (c)                                │
 // │                                                                                         │
 // │ int d = sum_of_cubes(x, y):                                                             │
-// │   movl (%rsp), %edi        ← Load x                                                    │
-// │   movl (%rsp+4), %esi      ← Load y                                                    │
-// │   call _Z12sum_of_cubesii  ← Actual function call                                      │
-// │   movl %eax, (%rsp+8)      ← Store result in d                                          │
+// │   movl    4(%rsp), %esi       ← Load y from stack (offset 4)                            │
+// │   movl    %r12d, %edi         ← x still in r12d, copy to arg1                           │
+// │   call    _Z12sum_of_cubesii  ← Actual call to sum_of_cubes(x,y)                        │
+// │   movl    %eax, %r12d         ← Store result in r12d (d)                                │
+// ├─────────────────────────────────────────────────────────────────────────────────────────┤
+// │ === FUNCTION BODIES (runtime versions) ===                                              │
+// │                                                                                         │
+// │ _Z6squarei (square):                                                                    │
+// │   endbr64                                                                               │
+// │   imull   %edi, %edi          ← n * n                                                   │
+// │   movl    %edi, %eax          ← Move result to return register                          │
+// │   ret                                                                                   │
+// │                                                                                         │
+// │ _Z4cubei (cube):                                                                        │
+// │   endbr64                                                                               │
+// │   pushq   %rbx                                                                          │
+// │   movl    %edi, %ebx          ← Save n in rbx                                           │
+// │   call    _Z6squarei          ← Call square(n)                                          │
+// │   imull   %ebx, %eax          ← n * square(n) = n * n² = n³                             │
+// │   popq    %rbx                                                                          │
+// │   ret                                                                                   │
+// │                                                                                         │
+// │ _Z12sum_of_cubesii (sum_of_cubes):                                                      │
+// │   endbr64                                                                               │
+// │   pushq   %rbp                                                                          │
+// │   movl    %esi, %ebp          ← Save b in rbp                                           │
+// │   pushq   %rbx                                                                          │
+// │   subq    $8, %rsp                                                                      │
+// │   call    _Z4cubei            ← Call cube(a) - a already in %edi                        │
+// │   movl    %ebp, %edi          ← Move b to arg register                                  │
+// │   movl    %eax, %ebx          ← Save cube(a) result in rbx                              │
+// │   call    _Z4cubei            ← Call cube(b)                                            │
+// │   addq    $8, %rsp                                                                      │
+// │   addl    %ebx, %eax          ← cube(a) + cube(b)                                       │
+// │   popq    %rbx                                                                          │
+// │   popq    %rbp                                                                          │
+// │   ret                                                                                   │
+// └─────────────────────────────────────────────────────────────────────────────────────────┘
+
+// ┌─────────────────────────────────────────────────────────────────────────────────────────┐
+// │ REAL OUTPUT FROM YOUR MACHINE (input: 3 4):                                             │
+// │   Compile-time a: 27                                                                    │
+// │   Compile-time b: 35                                                                    │
+// │   Runtime c=cube(3): 27                                                                 │
+// │   Runtime d=sum_of_cubes(3,4): 91 ← 27 + 64 = 91                                        │
+// ├─────────────────────────────────────────────────────────────────────────────────────────┤
+// │ CALL GRAPH for sum_of_cubes(3,4) at runtime:                                            │
+// │   sum_of_cubes(3,4)                                                                     │
+// │       ├── cube(3)                                                                       │
+// │       │       └── square(3) → imull 3,3 → 9                                             │
+// │       │       → imull 3,9 → 27                                                          │
+// │       ├── cube(4)                                                                       │
+// │       │       └── square(4) → imull 4,4 → 16                                            │
+// │       │       → imull 4,16 → 64                                                         │
+// │       └── addl 27,64 → 91                                                               │
+// │                                                                                         │
+// │ Total instructions: 2 calls + 4 imull + 1 addl = 7 operations                          │
+// │ Saved at compile-time: ALL 7 operations → just movl $35                                │
 // └─────────────────────────────────────────────────────────────────────────────────────────┘
 
 // ┌─────────────────────────────────────────────────────────────────────────────────────────┐
@@ -154,3 +211,4 @@ int main() {
 // │     return n * another_constexpr_function(n);  // OK: constexpr calls constexpr       │
 // │ }                                                                                       │
 // └─────────────────────────────────────────────────────────────────────────────────────────┘
+
