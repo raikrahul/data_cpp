@@ -66,6 +66,39 @@ constexpr float constexpr_sin(float x, int terms = 10) {
     return result;
 }
 
+// ┌─────────────────────────────────────────────────────────────────────────────────────────┐
+// │ ADAPTED SIN: Returns exact values for special cases                                    │
+// │                                                                                         │
+// │ PROBLEM: constexpr_sin(pi) = -1.14e-8 (should be 0.0)                                  │
+// │          constexpr_sin(pi/2) = 0.99999994 (should be 1.0)                              │
+// │                                                                                         │
+// │ SOLUTION: Check for special values and return exact results                            │
+// │                                                                                         │
+// │ SPECIAL CASES:                                                                          │
+// │   sin(0) = 0                                                                           │
+// │   sin(π/2) = 1                                                                         │
+// │   sin(π) = 0                                                                           │
+// │   sin(3π/2) = -1                                                                       │
+// │   sin(2π) = 0                                                                          │
+// └─────────────────────────────────────────────────────────────────────────────────────────┘
+constexpr float adapted_sin(float x) {
+    constexpr float pi = std::numbers::pi_v<float>;        // 3.14159274f
+    constexpr float half_pi = pi / 2.0f;                   // 1.57079637f
+    constexpr float three_half_pi = 3.0f * pi / 2.0f;      // 4.71238899f
+    constexpr float two_pi = 2.0f * pi;                    // 6.28318548f
+    constexpr float epsilon = 1e-6f;                       // Tolerance for comparison
+    
+    // Check special cases
+    if (x >= -epsilon && x <= epsilon) return 0.0f;                          // sin(0) = 0
+    if (x >= half_pi - epsilon && x <= half_pi + epsilon) return 1.0f;       // sin(π/2) = 1
+    if (x >= pi - epsilon && x <= pi + epsilon) return 0.0f;                 // sin(π) = 0
+    if (x >= three_half_pi - epsilon && x <= three_half_pi + epsilon) return -1.0f;  // sin(3π/2) = -1
+    if (x >= two_pi - epsilon && x <= two_pi + epsilon) return 0.0f;         // sin(2π) = 0
+    
+    // General case: use Taylor series
+    return constexpr_sin(x);
+}
+
 // Helper to print float as hex bits
 void print_float_bits(float f, const char* name) {
     union { float f; uint32_t u; } conv;
@@ -102,6 +135,18 @@ int main() {
     print_float_bits(runtime_sin_1, "std::sin(1.0)");
     print_float_bits(runtime_sin_pi, "std::sin(PI)");
     print_float_bits(runtime_sin_half_pi, "std::sin(PI/2)");
+    
+    std::cout << "\n=== ADAPTED SIN (exact values for special cases) ===\n\n";
+    
+    constexpr float adapted_1 = adapted_sin(1.0f);
+    constexpr float adapted_pi = adapted_sin(pi_f);
+    constexpr float adapted_half_pi = adapted_sin(pi_f / 2.0f);
+    constexpr float adapted_zero = adapted_sin(0.0f);
+    
+    print_float_bits(adapted_1, "adapted(1.0)");
+    print_float_bits(adapted_pi, "adapted(PI)");
+    print_float_bits(adapted_half_pi, "adapted(PI/2)");
+    print_float_bits(adapted_zero, "adapted(0)");
     
     std::cout << "\n=== ROUND-OFF ERROR ANALYSIS ===\n\n";
     
