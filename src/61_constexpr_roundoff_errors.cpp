@@ -253,6 +253,19 @@ int main() {
                   << ns / ITERATIONS << " ns/iter\n";
     }
     
+    // Benchmark CONSTEXPR INSIDE LOOP (what happens if you declare constexpr in loop?)
+    {
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < ITERATIONS; ++i) {
+            constexpr float local_sin = constexpr_sin(pi_f);  // Declared constexpr inside loop
+            sink = local_sin;
+        }
+        auto end = std::chrono::high_resolution_clock::now();
+        auto ns = static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
+        std::cout << "CONSTEXPR in loop:  " << ns / 1'000'000.0 << " ms total, "
+                  << ns / ITERATIONS << " ns/iter (same as case 1!)\n";
+    }
+    
     std::cout << "\nCONCLUSION: constexpr = just load, runtime = full computation\n";
     std::cout << "(sink=" << sink << " to prevent optimization)\n\n";
 
