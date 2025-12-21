@@ -1,27 +1,36 @@
-01. sizeof(int)=4, sizeof(float)=4, sizeof(std::string)=32 (libstdc++ assumption), alignof(int)=4, alignof(float)=4, alignof(std::string)=8 → struct Person {int age; float height; std::string name;} layout derived: age @ 0x00 (size 4) → height @ 0x04 (size 4, aligned 4) → name @ 0x08 (size 32, aligned 8) → total size = 0x08 + 0x20 = 0x28 (40 bytes) → alignof(Person)=8 → Padding check: 0x04+4=0x08 (aligned 8? Yes) → 0 padding bytes.
-02. Stack frame simulation for `main`: Base `0x7ffc_c000` → `myNeighbor` allocated `0x7ffc_c000` to `0x7ffc_c027` (40 bytes).
-03. Initialization `age=21`: 21 = `0x15` → Memory writes [0x7ffc_c000..0x7ffc_c003]: `15 00 00 00` (Little Endian).
-04. Initialization `height=1.76`: Sign (+)=0, Integer=1, Fraction=0.76. Binary fraction: 0.76→1.52(1), 0.52→1.04(1), 0.04→0.08(0), 0.08→0.16(0), 0.16→0.32(0), 0.32→0.64(0), 0.64→1.28(1), 0.28→0.56(0), 0.56→1.12(1) → `0.110000101...` → Norm: `1.110000101... * 2^0` → Exp: 127+0=127 (`01111111`) → Mantissa: `11000010100011110101110` → Hex: `3F E1 47 AE` → Memory writes [0x7ffc_c004..0x7ffc_c007]: `AE 47 E1 3F`.
-05. Initialization `name="Peter"`: Length 5 (including \0 = 6). SSO Threshold 15. 5 < 15 → SSO Active. No malloc. String object at `0x7ffc_c008`. Internal fields: pointer (8B), size (8B), capacity/buffer (16B). GCC layout: Ptr @ 0x00 points to internal buffer @ 0x10 (relative). Size @ 0x08 = 5. Buffer start @ 0x10 (relative) = `0x7ffc_c018` (absolute).
-06. Write "Peter" to SSO buffer: 'P'(0x50), 'e'(0x65), 't'(0x74), 'e'(0x65), 'r'(0x72), '\0'(0x00) → Memory writes [0x7ffc_c018..0x7ffc_c01D]: `50 65 74 65 72 00`. Guaranteed no heap allocation at 0x5555_xxxx.
-07. Access `myNeighbor.age`: Base `0x7ffc_c000` + Offset 0 → Load DWORD `15 00 00 00` → Register EAX `0x15` (21).
-08. Access `myNeighbor.height`: Base `0x7ffc_c000` + Offset 4 → Load DWORD `AE 47 E1 3F` → Register XMM0 `0x3FE147AE` → fpu stack ensures 1.76.
-09. Access `myNeighbor.name`: Base `0x7ffc_c000` + Offset 8 → `0x7ffc_c008`. `std::string::c_str()` inspects pointer. In SSO, pointer points to `0x7ffc_c018`. Returns address `0x7ffc_c018`.
-10. Failure Prediction F1 (Alignment Padding): Struct `Bad {char c; double d;}` → c @ 0, d @ 8 (align 8) → 7 bytes padding [1..7]. Size 16. Wasted 43%. Fix: Reorder larger types first or packed.
-11. Failure Prediction F2 (SSO Overflow): `name="1234567890123456"` (16 chars) → >15 → Malloc triggered. Ptr @ `0x7ffc_c008` points to Heap `0x5555_d000`. Stack contains pointer. Data on Heap.
-12. Failure Prediction F3 (Narrowing): `Person{21, 1.76, "Peter"}` OK. `Person{21.9, ...}` → 21.9 is double. Brace init checks type. Double→Int narrowing forbidden. Compiler Error.
-13. Failure Prediction F4 (Shadowing/Scope): `Person p` in inner scope shadows outer `p`. Stack offsets differ. Be aware of `rbp` offsets.
-14. Failure Prediction F5 (Memcpy danger): `memcpy(&dest, &src, 40)` on Heap-allocated string → Copied pointer. Both point to `0x5555_d000`. Double free on destruction. CRITICAL FAIL.
-15. Failure Prediction F6 (Return by Value): `Person p = make_person()` → RVO (Return Value Optimization) → Constructed in place. No copy. Address of `p` in `main` passed as hidden argument to `make_person`.
-16. Code verification task: Check `sizeof(Person)`. If 32, using Clang/libc++. If 40/48, using GCC/libstdc++. Adjust offsets accordingly.
-17. Trick: `std::string` internal pointer points to *internal buffer* (SSO) or *allocated memory* (Heap). User must differentiate by inspecting address value vs structure address.
-18. Trick: `*(int*)&p` modification → Changes `age`.:01. DRAW MEMORY LAYOUT [0x1000]. `struct Pad { char c; int i; };`. [0x1000]=c (1 byte). [0x1001..0x1003]=UNUSED (Padding). [0x1004..0x1007]=i (4 bytes). **Why**: `int` requires 4-byte alignment. It cannot start at 0x1001. Efficiency: Used=5, Allocated=8. Ratio=62%. **Verification**: `sizeof(Pad)` is 8, not 5. **Reorder**: `struct Pack { int i; char c; };`. [0x1000]=i. [0x1004]=c. [0x1005..0x1007]=Padding. Still 8 bytes? Yes, because total size must align to largest member (4). **Array Impact**: `Pad arr[2]`. [0x1000]..[0x1007] (Pad 1), [0x1008]..[0x100F] (Pad 2). Hole propagates. **Action**: Calculate wasted bytes in `struct { bool a; double b; bool c; }`. 1+7(pad)+8+1+7(pad)=24 bytes. Reordered: 8+1+1+6(pad)=16 bytes. Savings=33%.
-# Struct/Class Init & Memory Analysis
-Direct memory manipulation bypasses protection (if any).
-19. Trick: `myNeighbor.name.c_str()` return value lifetime → tied to `myNeighbor`. If `myNeighbor` destroyed, pointer dangles.
-20. Edge Case: `age=INT_MAX+1` → 0x7FFFFFFF + 1 = 0x80000000 → -2147483648 (Overflow/Wrap).
-21. Edge Case: `height=NaN` → 0x7FC00000. Comparison `h == h` returns False.
-22. Calculation: User to verify `1.76` float bits `3F E1 47 AE` by manual binary multiplication.
-23. Calculation: User to draw ASCII memory map of `0x7ffc_c000` to `0x7ffc_c027` with byte values.
-24. Calculation: User to determine offset of `height` if `age` was `short` (2 bytes) + `char` (1 byte). Alignment of `float` (4) forces padding byte @ offset 3.
-25. Final Step: Compile with `-O0` to observe raw `mov` instructions matching manual stack writes. `-O2` might vectorize or optimize away.
+01. DRAW struct S1 { char a; int b; char c; }. CALCULATE: a at offset 0 (1 byte), PADDING 3 bytes (align b to 4), b at offset 4 (4 bytes), c at offset 8 (1 byte), PADDING 3 bytes (align struct to 4). TOTAL sizeof(S1) = 12 bytes. VERIFY 1+3+4+1+3 = 12 ✓
+02. DRAW MEMORY: |0x00: a|0x01: pad|0x02: pad|0x03: pad|0x04: b[0]|0x05: b[1]|0x06: b[2]|0x07: b[3]|0x08: c|0x09: pad|0x0A: pad|0x0B: pad|. WASTED = 6 bytes = 50% ✓
+03. REORDER struct S2 { int b; char a; char c; }. CALCULATE: b at offset 0 (4 bytes), a at offset 4 (1 byte), c at offset 5 (1 byte), PADDING 2 bytes (align struct to 4). TOTAL sizeof(S2) = 8 bytes. SAVINGS = 12-8 = 4 bytes = 33% ✓
+04. DRAW MEMORY: |0x00-0x03: b|0x04: a|0x05: c|0x06: pad|0x07: pad|. WASTED = 2 bytes = 25%. COMPARE S1 waste = 50% → S2 waste = 25% ✓
+05. ■ GROUND: RULE = order members by size descending (largest first). int(4) → char(1) → char(1). Minimizes padding ■ NEXT: alignment rules ■
+06. DRAW struct S3 { char a; double b; char c; }. CALCULATE: a at offset 0 (1 byte), PADDING 7 bytes (align b to 8), b at offset 8 (8 bytes), c at offset 16 (1 byte), PADDING 7 bytes (align struct to 8). TOTAL sizeof(S3) = 24 bytes. WASTED = 14 bytes = 58% ✓
+07. REORDER struct S4 { double b; char a; char c; }. CALCULATE: b at offset 0 (8 bytes), a at offset 8 (1 byte), c at offset 9 (1 byte), PADDING 6 bytes (align struct to 8). TOTAL sizeof(S4) = 16 bytes. SAVINGS = 24-16 = 8 bytes = 33% ✓
+08. RULE: alignof(T) = max(alignof(member)) for each member. alignof(S3) = alignof(double) = 8. alignof(S1) = alignof(int) = 4. VERIFY with alignof() operator ✓
+09. ■ GROUND: struct alignment = largest member alignment. padding at end ensures array element alignment ■ NEXT: class vs struct ■
+10. COMPARE struct S { int x; } vs class C { int x; }. ONLY difference: struct default = public, class default = private. sizeof(S) = sizeof(C) = 4. MEMORY LAYOUT identical ✓
+11. DRAW class D { public: int x; private: int y; }. LAYOUT: x at offset 0, y at offset 4. ACCESS specifiers do NOT affect memory layout. sizeof(D) = 8 ✓
+12. DRAW class V { virtual void f(); int x; }. LAYOUT: vptr at offset 0 (8 bytes on 64-bit), x at offset 8 (4 bytes), PADDING 4 bytes. sizeof(V) = 16. OVERHEAD = 8 bytes for virtual ✓
+13. ■ GROUND: virtual adds 8-byte vptr at offset 0. Non-virtual class = same as struct ■ NEXT: initialization ■
+14. WRITE struct P { int a; int b; }. DEFAULT INIT: P p; → a and b UNINITIALIZED (garbage). VALUE INIT: P p{}; → a=0, b=0. VERIFY difference ✓
+15. WRITE struct Q { int a = 5; int b; }. DEFAULT INIT: Q q; → a=5 (default member initializer), b=GARBAGE. VALUE INIT: Q q{}; → a=5, b=0. TRAP: default member init != value init ✓
+16. WRITE struct R { int a; int b; R() : a(10), b(20) {} }. CONSTRUCTOR INIT: R r; → a=10, b=20. Member initializer list runs BEFORE constructor body ✓
+17. INITIALIZER LIST ORDER: struct T { int a; int b; T() : b(1), a(b) {} }. WARNING: a initialized before b (declaration order), but initializer references b. a = uninitialized b = GARBAGE. TRAP: init order follows declaration, not constructor list ✓
+18. ■ GROUND: initialization order = declaration order in class. Initializer list order in constructor is ignored ■ NEXT: aggregate init ■
+19. WRITE struct A { int x; int y; }. AGGREGATE INIT: A a = {1, 2}; → x=1, y=2. A a = {1}; → x=1, y=0 (remaining members zero-initialized). A a = {}; → x=0, y=0 ✓
+20. WRITE struct B { int x; int y = 5; }. AGGREGATE INIT: B b = {1}; → x=1, y=5 (default member initializer used). B b = {1, 2}; → x=1, y=2 (explicit overrides default). VERIFY ✓
+
+---FAILURES---
+F1. struct { char a; int b; } on 32-bit vs 64-bit → sizeof(int) same, but pointer sizes differ → struct size may vary → ✗ (actually int is 4 on both)
+F2. #pragma pack(1) struct { char a; int b; } → sizeof = 5 (no padding) → unaligned access → performance penalty or crash on some architectures → ⚠
+F3. struct { int a; } s; printf("%d", s.a); → uninitialized read → undefined behavior → ✗
+F4. struct { const int x; } s; → default constructor deleted → must provide initializer → compile error → ✗
+F5. struct { int& r; } s; → reference member requires initialization → no default constructor → compile error → ✗
+
+---AXIOMATIC CHECK---
+Line 01: Introduced struct S1 → primitive types char(1), int(4) with known sizes
+Line 03: Introduced reordering → derived from observing 50% waste in line 02
+Line 06: Introduced double → 8-byte alignment forces larger padding
+Line 10: Introduced class → derived from observing struct limitation (no access control by default)
+Line 12: Introduced virtual → derived from need for polymorphism, adds vptr overhead
+Line 14: Introduced initialization → derived from observing uninitialized members
+NO JUMPING AHEAD: Each concept derived from limitation observed in previous lines.

@@ -1,69 +1,37 @@
-:01. DRAW MEMORY. String Literal "Alice" at [0x4000]. `std::string s1 = "Alice"` at [Stack 0x5000]. Heap Buffer at [0x6000]. `operator==` compares *Content* (0x6000 vs 0x4000). DRAW Pointer `const char* p1="Alice"`. `const char* p2="Alice"`. `p1==p2` compares *Address* (0x4000 vs 0x4000). Success? Yes, due to String Interning. DRAW `char array[]="Alice"`. New Address [0x7000]. `p1==array` -> False. **Why**: Content comparison != Address comparison. **Trap**: `if(name == "Alice")` works for string, fails for raw pointers if not interned. **Action**: Always cast to `string_view` for comparison.
-# Person Name Compare Traps
+01. DRAW struct Person { std::string name; }. DRAW p1 at 0x7FFF0000: name.data() → 0x7FFF0010 (SSO buffer). DRAW p2 at 0x7FFF0040: name.data() → 0x7FFF0050 (SSO buffer). BOTH contain "Alice" (5 chars < 15 SSO threshold). VERIFY names stored INSIDE string object ✓
+02. COMPARE &p1.name vs &p2.name. &p1.name = 0x7FFF0000. &p2.name = 0x7FFF0040. CALCULATE 0x7FFF0000 ≠ 0x7FFF0040. COMPARE: false. TRAP: comparing ADDRESSES, not CONTENT ✗
+03. COMPARE p1.name == p2.name. STEP 1: operator==(string, string) called. STEP 2: compare sizes (5 == 5 ✓). STEP 3: memcmp("Alice", "Alice", 5) = 0. RESULT: true. CORRECT: comparing CONTENT ✓
+04. COMPARE p1.name.c_str() == p2.name.c_str(). c_str() returns pointer to internal buffer. p1.name.c_str() = 0x7FFF0010. p2.name.c_str() = 0x7FFF0050. COMPARE pointers: false. TRAP: same content, different addresses ✗
+05. ■ GROUND: &str compares string object addresses. str.c_str() compares buffer addresses. str == str compares content. ONLY == is correct for content comparison ■ NEXT: heap strings ■
+06. DRAW p3.name = "VeryLongNameThatExceedsSSO" (26 chars > 15). MEMORY: p3 at 0x7FFF0080. name.data() → 0xA000 (heap allocated). SSO threshold exceeded → heap allocation ✓
+07. DRAW p4.name = "VeryLongNameThatExceedsSSO". MEMORY: p4 at 0x7FFF00C0. name.data() → 0xB000 (different heap address). COMPARE c_str(): 0xA000 ≠ 0xB000 = false. CONTENT identical but addresses differ ✓
+08. TRAP: never compare string content with pointer comparison. Always use operator== or compare() or strcmp() ✓
+09. ■ GROUND: SSO = small string optimization (< 15 chars inline). Heap = large strings. Either way, different string objects have different buffer addresses ■ NEXT: memcmp trap ■
+10. COMPARE memcmp(p1.name.c_str(), p2.name.c_str(), 5). p1.name = "Alice", p2.name = "Alice". memcmp("Alice", "Alice", 5) = 0. RESULT: strings equal ✓
+11. TRAP: memcmp(p1.name.c_str(), p5.name.c_str(), 5) where p5.name = "AliceX". memcmp("Alice", "Alice", 5) = 0. BUT p5.name has 6 chars! memcmp only checks first 5 bytes. FALSE POSITIVE ✗
+12. CORRECT: FIRST check p1.name.size() == p5.name.size(). 5 ≠ 6 → not equal. SKIP memcmp. SIZE check must come BEFORE byte comparison ✓
+13. ■ GROUND: memcmp(a, b, n) compares n bytes regardless of string length. Always check .size() equality first ■ NEXT: compare() method ■
+14. USE p1.name.compare(p2.name). RETURN VALUE: 0 if equal, <0 if p1 < p2, >0 if p1 > p2. compare() handles size and content. PREFERRED over manual memcmp ✓
+15. LEXICOGRAPHIC ORDER: "Alice".compare("Bob") = -1 (A < B). "Bob".compare("Alice") = +1 (B > A). "Alice".compare("Alice") = 0 ✓
+16. PARTIAL COMPARE: p1.name.compare(0, 3, "Ali") = compare first 3 chars. "Ali".compare("Ali") = 0 ✓
+17. ■ GROUND: compare() = safe, handles length. memcmp() = unsafe without size check. strcmp() = C-style, null-terminated only ■ NEXT: sorting ■
+18. DRAW vector<Person> v = {p2, p1} where p1.name="Alice", p2.name="Bob". SORT by name: std::sort(v.begin(), v.end(), [](auto& a, auto& b) { return a.name < b.name; }). AFTER: v = {p1, p2} (Alice < Bob) ✓
+19. TRAP: sort by pointer: [](auto& a, auto& b) { return &a.name < &b.name; }. SORTS by address order in memory. NOT alphabetical. UNDEFINED order across runs ✗
+20. VERIFY sort correctness: use operator< which calls string::compare() internally. NEVER sort by address ✓
 
-02. Person p1{"Alice", 30}; @ Stack 0x7ffc_a000 → name @ offset 0, age @ offset 32 ✓
-03. Person p2{"Alice", 25}; @ Stack 0x7ffc_a028 → different object, same name content ✓
-04. SSO check: "Alice" length = 5 < 15 (SSO threshold) → stored inline in string buffer ✓
-05. p1.name internal buffer @ 0x7ffc_a000+16 = 0x7ffc_a010 → contains "Alice\0" ✓
-06. p2.name internal buffer @ 0x7ffc_a028+16 = 0x7ffc_a038 → contains "Alice\0" ✓
-07. Memory comparison: 0x7ffc_a010 vs 0x7ffc_a038 → DIFFERENT ADDRESSES → wrong approach ✗
-08. Content comparison: "Alice"[0..4] vs "Alice"[0..4] → 'A'=='A', 'l'=='l', 'i'=='i', 'c'=='c', 'e'=='e' → 5 char compares → true ✓
-09. Trap #1: &p1.name == &p2.name → 0x7ffc_a000 == 0x7ffc_a028 → false (compares string object addresses) ✗
-10. Trap #2: p1.name.c_str() == p2.name.c_str() → 0x7ffc_a010 == 0x7ffc_a038 → false (compares buffer pointers) ✗
-11. Trap #3: p1.name.data() == p2.name.data() → same as c_str() → false ✗
-12. Correct #1: p1.name == p2.name → calls std::string::operator==() → compares length then bytes → true ✓
-13. Correct #2: p1.name.compare(p2.name) == 0 → returns 0 if equal, <0 if less, >0 if greater → true ✓
-14. Correct #3: strcmp(p1.name.c_str(), p2.name.c_str()) == 0 → C-style null-terminated compare → true ✓
-15. Heap case: Person p3{"VeryLongNameThatExceedsSSO", 40}; → length = 26 > 15 → heap allocation ✓
-16. p3.name @ 0x7ffc_a050, heap buffer @ 0x5555_a000 containing "VeryLong..." ✓
-17. Person p4{"VeryLongNameThatExceedsSSO", 45}; → heap buffer @ 0x5555_b000 (DIFFERENT heap) ✓
-18. p3.name.c_str() = 0x5555_a000 ≠ p4.name.c_str() = 0x5555_b000 → pointer compare fails ✗
-19. p3.name == p4.name → compares 26 bytes of content → true ✓
-20. Performance: SSO compare = 5 bytes × 1 cycle = 5 cycles. Heap compare = 26 bytes + cache miss = 200 cycles ✓
-21. Large scale: N=1000000 Person pairs, name length L=20 → 1000000 × 20 × 1 cycle = 20M cycles = 6.67ms @ 3GHz ✓
-22. Hash approach: std::hash<string>{}(p1.name) → computes 64-bit hash → compare hashes → O(1) but false positives ✗
-23. Hash collision: N=1M names, expected collisions = N²/2^64 = 10^12/10^19 ≈ 0.00005 per pair → 5 collisions total ✗
-24. Byte-by-byte: for(i=0;i<len;i++) if(a[i]!=b[i]) return false; → same as operator== internally ✓
-25. memcmp: memcmp(p1.name.data(), p2.name.data(), p1.name.size()) → requires size check first! ✗
-26. Failure F1: memcmp without size check → p1.name="Alice"(5), p2.name="AliceX"(6) → memcmp(5) = equal → WRONG! ✗
-27. Failure F2: Using strncmp with wrong length → strncmp(a,b,min(len1,len2)) → "Alice" vs "AliceX" → 0 (equal up to 5) ✗
-28. Failure F3: Case sensitivity → "alice" != "Alice" → strcmp returns non-zero → need strcasecmp or tolower loop ✓
-29. Edge case: Empty names → p1.name="" (length 0), p2.name="" → "" == "" → true ✓
-30. Edge case: One empty → p1.name="Alice", p2.name="" → "Alice" == "" → false ✓
-31. Edge case: Unicode → p1.name="日本" (6 bytes UTF-8), p2.name="日本" → byte compare works for exact match ✓
-32. Edge case: Null in string → p1.name="A\0B" (3 bytes), p2.name="A\0C" → strcmp stops at \0 → WRONG! ✗
-33. std::string handles embedded nulls: "A\0B".size()=3, compare all 3 bytes → correct ✓
-34. Alternative: std::string_view → no allocation, just ptr+len → sameName(string_view a, string_view b) { return a==b; } ✓
-35. Alternative: Hashing + verify → if(hash(a)==hash(b)) return a==b; else return false; → early exit for different ✓
-36. Cost analysis: 
-    | Method          | Best Case | Worst Case | Notes                    |
-    |-----------------|-----------|------------|--------------------------|
-    | operator==      | O(1)      | O(n)       | Early exit on length     |
-    | compare()       | O(1)      | O(n)       | Same as ==               |
-    | strcmp          | O(n)      | O(n)       | No length pre-check      |
-    | memcmp          | O(n)      | O(n)       | Requires size==size      |
-    | hash            | O(n)      | O(n)       | False positives possible |
-37. Diagram: p1 vs p2 comparison flow
-    ┌─────────────────────────────────────────────────────────────────────────┐
-    │ Stack 0x7ffc_a000: Person p1                                            │
-    │ ├── [0x7ffc_a000..0x7ffc_a01f] name: std::string (32 bytes)            │
-    │ │   ├── [0x7ffc_a000..0x7ffc_a007] size = 5                            │
-    │ │   ├── [0x7ffc_a008..0x7ffc_a00f] capacity = 15 (SSO)                 │
-    │ │   └── [0x7ffc_a010..0x7ffc_a01f] buffer = "Alice\0.........."        │
-    │ └── [0x7ffc_a020..0x7ffc_a023] age = 30 = 0x1e                         │
-    │                                                                         │
-    │ Stack 0x7ffc_a028: Person p2                                            │
-    │ ├── [0x7ffc_a028..0x7ffc_a047] name: std::string (32 bytes)            │
-    │ │   ├── [0x7ffc_a028..0x7ffc_a02f] size = 5                            │
-    │ │   ├── [0x7ffc_a030..0x7ffc_a037] capacity = 15 (SSO)                 │
-    │ │   └── [0x7ffc_a038..0x7ffc_a047] buffer = "Alice\0.........."        │
-    │ └── [0x7ffc_a048..0x7ffc_a04b] age = 25 = 0x19                         │
-    │                                                                         │
-    │ Comparison: p1.name == p2.name                                          │
-    │ Step 1: p1.name.size() (5) == p2.name.size() (5) ✓                     │
-    │ Step 2: memcmp(0x7ffc_a010, 0x7ffc_a038, 5) → 0 (equal) ✓              │
-    │ Result: true                                                            │
-    └─────────────────────────────────────────────────────────────────────────┘
-38. Why diagram: Shows that addresses are DIFFERENT but content is SAME → must compare content, not addresses
-39. Why SSO matters: Short names avoid heap → buffer inside string object → &buffer = &string + 16
-40. Punishment: Compare 1M pairs of 100-char names → 1M × 100 × 1ns = 100ms. With hash pre-filter: 1M × O(1) hash compare = 1ms + verification = 1.1ms → 100× faster for mostly-different names ✓
+---FAILURES---
+F1. if (&p1.name == &p2.name) → comparing addresses → always false for different objects → logic error → ✗
+F2. if (p1.name.c_str() == p2.name.c_str()) → comparing buffer pointers → always false for different strings → ✗
+F3. memcmp(a.c_str(), b.c_str(), a.size()) where b.size() < a.size() → reads beyond b's buffer → undefined behavior → ✗
+F4. strcmp(a.c_str(), b.c_str()) on binary data with null bytes → stops at first \0 → incomplete comparison → ✗
+F5. std::string s1 = "test"; const char* s2 = "test"; if (s1 == s2) → works (implicit conversion) → ✓, but if (s2 == s1) also works → OK
+
+---AXIOMATIC CHECK---
+Line 01: Introduced Person with string member → basic struct layout
+Line 02: Introduced address comparison → derived from common mistake &a == &b
+Line 03: Introduced operator== → correct way to compare, derived from failure in line 02
+Line 06: Introduced heap allocation → derived from SSO threshold exceeded
+Line 10: Introduced memcmp → low-level comparison, derived from need for byte-level control
+Line 11: Introduced memcmp trap → derived from observing size difference ignored
+Line 14: Introduced compare() → safe alternative derived from memcmp pitfalls
+NO JUMPING AHEAD: Each comparison method introduced after showing failure of previous.
