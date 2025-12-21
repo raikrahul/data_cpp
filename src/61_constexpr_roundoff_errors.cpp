@@ -131,7 +131,7 @@ constexpr float my_fact(int n) {
         // mulss: res = res × (float)i → round-to-nearest after each mul
         // For n=15: i=15 → (float)15 = 15.0 exact → res = 87178291200 × 15 = 1307674368000
         //           1307674368000 in float → 1.307674... × 10^12 → exponent = 40 → mantissa truncated
-        res *= i;
+        res *= static_cast<float>(i);
     }
     return res;
     // RETURN for n=15: 1307674368000.0 → float approximation → 0x544B8B50 (verify with calculator)
