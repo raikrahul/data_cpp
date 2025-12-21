@@ -9,44 +9,44 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 | 16 | Smart Pointers                             | [36_smart_pointer_factory.md](src/36_smart_pointer_factory.md) | Done        |
 | 17 | Endianness                                 | [Conversation Log]                                 | Done        |
 | 18 | T9 Predictive Text                         | [T9 Problem]                                       | Done        |
-| 19 | Containers Worksheet                       | [containers_worksheet.cpp](src/containers_worksheet.cpp) | Done        |
-| 20 | STL Algorithms Worksheet                   | [20_stl_algorithms_worksheet.cpp](src/20_stl_algorithms_worksheet.cpp) | In Progress |
-| 21 | std::for_each Deep Dive                    | [21_for_each_deep_dive.cpp](src/21_for_each_deep_dive.cpp) | In Progress |
-| 22 | SIMD & Parallel Execution                  | [22_simd_parallel_puzzle.cpp](src/22_simd_parallel_puzzle.cpp) | In Progress |
-| 23 | Lambda Anatomy                             | [23_lambda_anatomy.cpp](src/23_lambda_anatomy.cpp) | Done        |
-| 24 | std::reduce & std::transform               | [24_reduce_demo.cpp](src/24_reduce_demo.cpp)       | Done        |
-| 25 | Transform Even/Odd                         | [25_transform_even_odd.cpp](src/25_transform_even_odd.cpp) | Done        |
-| 26 | Transform Parity (Practice)                | [26_transform_parity.cpp](src/26_transform_parity.cpp) | In Progress |
-| 27 | std::equal vs std::mismatch                | [27_equal_mismatch.cpp](src/27_equal_mismatch.cpp) | In Progress |
-| 28 | Ranges: Generate & Shuffle                 | [28_ranges_generate.cpp](src/28_ranges_generate.cpp) | In Progress |
-| 29 | Ranges: Find & Equal                       | [29_ranges_find.cpp](src/29_ranges_find.cpp)       | In Progress |
-| 30 | Vector vs Ranges Fill                      | [30_vector_vs_ranges.cpp](src/30_vector_vs_ranges.cpp) | In Progress |
-| 31 | Iota & Transform Multiples                 | [31_iota_transform.cpp](src/31_iota_transform.cpp) | In Progress |
-| 32 | Transform Reduce Avg/StdDev                | [32_transform_reduce.cpp](src/32_transform_reduce.cpp) | In Progress |
-| 33 | Ranges Views Memory Layout                 | [33_ranges_views_memory.cpp](src/33_ranges_views_memory.cpp) | In Progress |
-| 34 | View Abstraction Layer                     | [34_view_abstraction.cpp](src/34_view_abstraction.cpp) | In Progress |
-| 35 | Iota View Formula                          | [35_iota_view_formula.cpp](src/35_iota_view_formula.cpp) | Done        |
+| 19 | Containers Worksheet                       | [containers_worksheet.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/containers_worksheet.cpp) | Done        |
+| 20 | STL Algorithms Worksheet                   | [20_stl_algorithms_worksheet.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/20_stl_algorithms_worksheet.cpp) | In Progress |
+| 21 | std::for_each Deep Dive                    | [21_for_each_deep_dive.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/21_for_each_deep_dive.cpp) | In Progress |
+| 22 | SIMD & Parallel Execution                  | [22_simd_parallel_puzzle.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/22_simd_parallel_puzzle.cpp) | In Progress |
+| 23 | Lambda Anatomy                             | [23_lambda_anatomy.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/23_lambda_anatomy.cpp) | Done        |
+| 24 | std::reduce & std::transform               | [24_reduce_demo.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/24_reduce_demo.cpp)       | Done        |
+| 25 | Transform Even/Odd                         | [25_transform_even_odd.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/25_transform_even_odd.cpp) | Done        |
+| 26 | Transform Parity (Practice)                | [26_transform_parity.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/26_transform_parity.cpp) | In Progress |
+| 27 | std::equal vs std::mismatch                | [27_equal_mismatch.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/27_equal_mismatch.cpp) | In Progress |
+| 28 | Ranges: Generate & Shuffle                 | [28_ranges_generate.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/28_ranges_generate.cpp) | In Progress |
+| 29 | Ranges: Find & Equal                       | [29_ranges_find.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/29_ranges_find.cpp)       | In Progress |
+| 30 | Vector vs Ranges Fill                      | [30_vector_vs_ranges.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/30_vector_vs_ranges.cpp) | In Progress |
+| 31 | Iota & Transform Multiples                 | [31_iota_transform.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/31_iota_transform.cpp) | In Progress |
+| 32 | Transform Reduce Avg/StdDev                | [32_transform_reduce.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/32_transform_reduce.cpp) | In Progress |
+| 33 | Ranges Views Memory Layout                 | [33_ranges_views_memory.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/33_ranges_views_memory.cpp) | In Progress |
+| 34 | View Abstraction Layer                     | [34_view_abstraction.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/34_view_abstraction.cpp) | In Progress |
+| 35 | Iota View Formula                          | [35_iota_view_formula.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/35_iota_view_formula.cpp) | Done        |
 | 36 | Smart Pointer Factory                      | [36_smart_pointer_factory.md](src/36_smart_pointer_factory.md) | In Progress |
 | 37 | Struct/Class Init & Memory                 | [37_struct_class_init.md](src/37_struct_class_init.md) | In Progress |
 | 38 | Functor vs Lambda State                    | [38_functor_vs_lambda.md](src/38_functor_vs_lambda.md) | In Progress |
 | 39 | Auto Type Deduction & Copy                 | [39_auto_type_deduction.md](src/39_auto_type_deduction.md) | In Progress |
 | 40 | Person Name Compare Traps                  | [40_person_name_compare.md](src/40_person_name_compare.md) | In Progress |
 | 41 | Inheritance & Virtual Dispatch             | [41_inheritance_virtual.md](src/41_inheritance_virtual.md) | In Progress |
-| 42 | No Virtual Assembly                        | [42_no_virtual_assembly.s](src/42_no_virtual_assembly.s) | Done        |
-| 43 | Non-Virtual Calls Virtual                  | [43_nonvirtual_calls_virtual.s](src/43_nonvirtual_calls_virtual.s) | Done        |
-| 44 | Assembly Virtual Dispatch                  | [44_assembly_virtual_dispatch.s](src/44_assembly_virtual_dispatch.s) | Done        |
-| 45 | RTTI typeid Address Comparison             | [45_rtti_typeid_address.cpp](src/45_rtti_typeid_address.cpp) | Done        |
-| 46 | Template Power Function                    | [46_template_power.cpp](src/46_template_power.cpp) | In Progress |
-| 47 | countEqualItems Template                   | [47_count_equal_items.cpp](src/47_count_equal_items.cpp) | Done        |
-| 48 | Abbreviated Template Syntax                | [48_abbreviated_template.cpp](src/48_abbreviated_template.cpp) | In Progress |
-| 49 | Template vs Auto Assembly                  | [49_template_vs_auto_asm.cpp](src/49_template_vs_auto_asm.cpp) | Done        |
-| 50 | Abbreviated Duck Typing                    | [50_abbreviated_duck_typing.cpp](src/50_abbreviated_duck_typing.cpp) | Done        |
-| 51 | Missing size() Error                       | [51_missing_size_error.cpp](src/51_missing_size_error.cpp) | Done        |
-| 52 | All Syntax Versions                        | [52_all_syntax_versions.cpp](src/52_all_syntax_versions.cpp) | Done        |
+| 42 | No Virtual Assembly                        | [42_no_virtual_assembly.s](https://github.com/raikrahul/data_cpp/blob/master/src/42_no_virtual_assembly.s) | Done        |
+| 43 | Non-Virtual Calls Virtual                  | [43_nonvirtual_calls_virtual.s](https://github.com/raikrahul/data_cpp/blob/master/src/43_nonvirtual_calls_virtual.s) | Done        |
+| 44 | Assembly Virtual Dispatch                  | [44_assembly_virtual_dispatch.s](https://github.com/raikrahul/data_cpp/blob/master/src/44_assembly_virtual_dispatch.s) | Done        |
+| 45 | RTTI typeid Address Comparison             | [45_rtti_typeid_address.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/45_rtti_typeid_address.cpp) | Done        |
+| 46 | Template Power Function                    | [46_template_power.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/46_template_power.cpp) | In Progress |
+| 47 | countEqualItems Template                   | [47_count_equal_items.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/47_count_equal_items.cpp) | Done        |
+| 48 | Abbreviated Template Syntax                | [48_abbreviated_template.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/48_abbreviated_template.cpp) | In Progress |
+| 49 | Template vs Auto Assembly                  | [49_template_vs_auto_asm.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/49_template_vs_auto_asm.cpp) | Done        |
+| 50 | Abbreviated Duck Typing                    | [50_abbreviated_duck_typing.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/50_abbreviated_duck_typing.cpp) | Done        |
+| 51 | Missing size() Error                       | [51_missing_size_error.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/51_missing_size_error.cpp) | Done        |
+| 52 | All Syntax Versions                        | [52_all_syntax_versions.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/52_all_syntax_versions.cpp) | Done        |
 | 53 | C++ Templates Worksheet                    | [53_cpp_templates_worksheet.md](src/53_cpp_templates_worksheet.md) | Done        |
-| 54 | Recursive Template Assembly                | [54_recursive_template_asm.cpp](src/54_recursive_template_asm.cpp) | Done        |
-| 55 | Template Dimensions struct                 | [55_template_dimensions.cpp](src/55_template_dimensions.cpp) | Done        |
-| 56 | N-Dimensional Logic                        | [56_n_dimensional_logic.cpp](src/56_n_dimensional_logic.cpp) | Done        |
+| 54 | Recursive Template Assembly                | [54_recursive_template_asm.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/54_recursive_template_asm.cpp) | Done        |
+| 55 | Template Dimensions struct                 | [55_template_dimensions.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/55_template_dimensions.cpp) | Done        |
+| 56 | N-Dimensional Logic                        | [56_n_dimensional_logic.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/56_n_dimensional_logic.cpp) | Done        |
 | 57 | Swap Evolution (Mechanical Chain)          | [57_swap_evolution.md](src/57_swap_evolution.md) | Done        |
 
 ## Build and Run
