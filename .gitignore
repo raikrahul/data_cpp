@@ -1,6 +1,7 @@
 # Agent configuration (private)
 .agent/
 .gemini/
+seastar/
 
 # Build output
 build/
