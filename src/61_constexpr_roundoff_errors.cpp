@@ -15,6 +15,27 @@
 #include <chrono>
 
 // ┌─────────────────────────────────────────────────────────────────────────────────────────┐
+// │ TEST: This function is WRONG - demonstrates if constexpr error                         │
+// │ UNCOMMENT TO SEE COMPILE ERROR                                                          │
+// └─────────────────────────────────────────────────────────────────────────────────────────┘
+// template<typename T>
+// constexpr T improvedSin_BROKEN(T x) {
+//     if constexpr (x == std::numbers::pi_v<T>) {  // ERROR: x is not a constant expression
+//         return T{};
+//     }
+//     else {
+//         return std::sin(x);
+//     }
+// }
+//
+// WHY IT FAILS:
+// if constexpr → condition must be compile-time constant
+// x → function parameter → value unknown at compile time
+// x == pi → runtime comparison, not compile-time
+// ∴ COMPILE ERROR: "x is not a constant expression"
+
+
+// ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 // │ CONSTEXPR TAYLOR SERIES FOR sin(x):                                                     │
 // │ sin(x) = x - x³/3! + x⁵/5! - x⁷/7! + x⁹/9! - ...                                       │
 // │                                                                                         │
