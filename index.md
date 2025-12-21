@@ -51,6 +51,7 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 | 58 | Constexpr Computation                      | [58_constexpr_derivation.md](https://github.com/raikrahul/data_cpp/blob/master/src/58_constexpr_derivation.md) | Done        |
 | 59 | Constexpr Compiler Interpreter             | [59_constexpr_compiler_interpreter.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/59_constexpr_compiler_interpreter.cpp) | Done        |
 | 60 | Constexpr Chain and Fallback               | [60_constexpr_chain_and_fallback.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/60_constexpr_chain_and_fallback.cpp) | Done        |
+| 61 | Constexpr Round-off Errors               | [61_constexpr_roundoff_errors.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/61_constexpr_roundoff_errors.cpp) | Done        |
 
 ## Build and Run
 
