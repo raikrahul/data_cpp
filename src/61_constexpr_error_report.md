@@ -177,3 +177,124 @@ YOUR CONFUSION:
 □ float template parameters: C++20 only
 □ Enum = integer = valid template parameter
 □ Round-off happens where computation happens
+
+---
+
+## E7: "if constexpr (x == pi)" with function parameter
+
+YOUR CODE:
+```cpp
+template<typename T>
+constexpr T improvedSin(T x) {
+    if constexpr (x == numbers::pi_v<T>) {  // ← ERROR
+        return T{};
+    }
+}
+```
+
+ERROR:
+```
+error: 'x' is not a constant expression
+```
+
+WHY WRONG:
+```
+x = function parameter
+x = value passed at CALL TIME
+x = RUNTIME value
+if constexpr = COMPILE-TIME check
+RUNTIME value in COMPILE-TIME check = IMPOSSIBLE
+```
+
+WHAT YOU CONFUSED:
+```
+function parameter ≠ template parameter
+T sin(T x)    ← x is runtime
+template<T X> ← X is compile-time
+```
+
+---
+
+## E8: "C++23 will fix it"
+
+YOUR CLAIM: "use C++23 see if that works"
+
+RESULT: Same error in C++23
+
+WHY:
+```
+Function parameter = runtime value
+No C++ version changes this
+C++17, C++20, C++23, C++26 = same error
+```
+
+WHAT C++20 DOES ADD:
+```
+template<float X>  ← Float as NTTP (C++20+)
+float sin() {
+    if constexpr (X == pi)  ← X is template param = compile-time ✓
+}
+```
+
+YOU MISSED:
+```
+C++20 adds float NTTP
+C++20 does NOT make function params compile-time
+```
+
+---
+
+## E9: Enum typo "PII" instead of "PI"
+
+YOUR CODE:
+```cpp
+enum class Angle { PII, GENERAL };  // ← Typo: PII
+template<> ... template_sin<Angle::PI>  // ← Uses PI
+```
+
+ERROR: Angle::PI not defined in enum
+
+WHY SLOPPY:
+```
+Typing without reading
+PII ≠ PI
+2 different symbols
+Compiler cannot guess your intent
+```
+
+---
+
+## E10: "sin(π) = 1.0f"
+
+YOUR CODE:
+```cpp
+template<> constexpr float template_sin<Angle::PI>(float) { return 1.0f; }
+```
+
+MATH FACT:
+```
+sin(π) = 0
+sin(π/2) = 1
+```
+
+YOU WROTE: 1.0f
+SHOULD BE: 0.0f
+
+WHY:
+```
+Confused π with π/2
+sin(π) = 0
+sin(π/2) = 1
+Basic trigonometry error
+```
+
+---
+
+## Prevention Checklist (Updated)
+
+□ function parameter = runtime (always)
+□ template parameter = compile-time (always)
+□ if constexpr needs compile-time condition
+□ C++ version does not change function param nature
+□ Read what you type
+□ sin(π) = 0, sin(π/2) = 1

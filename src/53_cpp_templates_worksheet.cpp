@@ -35,10 +35,10 @@ auto ipow_abbr(auto x, int n) {
 // ============================================================================
 // Exercise 3: Non-Type Template Parameters
 // ============================================================================
-template<int N, typename T>
+template<std::size_t N, typename T>
 struct FixedArray {
     T data[N];
-    T& operator[](int i) { return data[i]; }
+    T& operator[](std::size_t i) { return data[i]; }
 };
 
 // ============================================================================
