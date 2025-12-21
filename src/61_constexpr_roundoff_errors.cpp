@@ -140,6 +140,77 @@ int main() {
     // ┌─────────────────────────────────────────────────────────────────────────────────────┐
     // │ BENCHMARK: CONSTEXPR vs RUNTIME                                                     │
     // └─────────────────────────────────────────────────────────────────────────────────────┘
+    //
+    // ┌─────────────────────────────────────────────────────────────────────────────────────┐
+    // │ WHY IS YOUR constexpr_sin SLOWEST AT RUNTIME?                                       │
+    // │                                                                                      │
+    // │ DIAGRAM: What happens in each case                                                  │
+    // │                                                                                      │
+    // │ CASE 1: CONSTEXPR LOAD (2.07 ns)                                                   │
+    // │ ┌─────────────────────────────────────────────────────────────────────────────────┐ │
+    // │ │ COMPILE TIME (g++ running):                                                     │ │
+    // │ │   constexpr_sin(3.14159274f)                                                   │ │
+    // │ │   → pow(3.14,1)=3.14, pow(3.14,3)=31.0, pow(3.14,5)=306.0...                  │ │
+    // │ │   → factorial(1)=1, factorial(3)=6, factorial(5)=120...                        │ │
+    // │ │   → 10 terms computed by g++ = 0xb2435010                                      │ │
+    // │ │   → Stored in .rodata section of binary                                        │ │
+    // │ │                                                                                 │ │
+    // │ │ RUN TIME (CPU executing):                                                       │ │
+    // │ │   movss .LC12(%rip), %xmm0  ← 1 instruction, 4 bytes from memory              │ │
+    // │ │   TIME: 2.07 ns                                                                │ │
+    // │ └─────────────────────────────────────────────────────────────────────────────────┘ │
+    // │                                                                                      │
+    // │ CASE 2: std::sin (6.70 ns)                                                         │
+    // │ ┌─────────────────────────────────────────────────────────────────────────────────┐ │
+    // │ │ RUN TIME (CPU executing):                                                       │ │
+    // │ │   call sinf@PLT                                                                 │ │
+    // │ │   → libc uses OPTIMIZED Chebyshev approximation                               │ │
+    // │ │   → SSE SIMD instructions                                                       │ │
+    // │ │   → Range reduction (x mod 2π)                                                 │ │
+    // │ │   → Only ~7 terms needed (better polynomial)                                   │ │
+    // │ │   TIME: 6.70 ns                                                                │ │
+    // │ └─────────────────────────────────────────────────────────────────────────────────┘ │
+    // │                                                                                      │
+    // │ CASE 3: YOUR constexpr_sin AT RUNTIME (359 ns) ← SLOWEST!                          │
+    // │ ┌─────────────────────────────────────────────────────────────────────────────────┐ │
+    // │ │ RUN TIME (CPU executing):                                                       │ │
+    // │ │   call _Z13constexpr_sinfi                                                      │ │
+    // │ │   → NAIVE Taylor series: 10 terms                                               │ │
+    // │ │   → constexpr_pow: LOOP n multiplications (not optimized)                      │ │
+    // │ │   → constexpr_factorial: LOOP n multiplications (not optimized)               │ │
+    // │ │   → NO SIMD, NO range reduction, NO Chebyshev                                   │ │
+    // │ │   TIME: 359 ns                                                                  │ │
+    // │ └─────────────────────────────────────────────────────────────────────────────────┘ │
+    // │                                                                                      │
+    // │ WHY YOUR CODE IS SLOW:                                                              │
+    // │ ┌─────────────────────────────────────────────────────────────────────────────────┐ │
+    // │ │ YOUR constexpr_pow(3.14, 9) = 9 multiplications in a LOOP                     │ │
+    // │ │   for (int i = 0; i < 9; ++i) result *= 3.14;                                  │ │
+    // │ │   = 9 imul + 9 loop iterations + 9 stores                                      │ │
+    // │ │                                                                                 │ │
+    // │ │ YOUR constexpr_factorial(9) = 8 multiplications in a LOOP                     │ │
+    // │ │   for (int i = 2; i <= 9; ++i) result *= i;                                   │ │
+    // │ │   = 8 imul + 8 loop iterations + 8 stores                                      │ │
+    // │ │                                                                                 │ │
+    // │ │ PER TERM: ~17 multiplications + 17 loop iterations + 17 stores                │ │
+    // │ │ 10 TERMS: ~170 multiplications + 170 loop iterations + 170 stores             │ │
+    // │ │                                                                                 │ │
+    // │ │ std::sin: Uses Horner's method, no loops, ~7 FMA instructions total           │ │
+    // │ └─────────────────────────────────────────────────────────────────────────────────┘ │
+    // │                                                                                      │
+    // │ WHY CONSTEXPR IS STILL VALUABLE:                                                    │
+    // │ ┌─────────────────────────────────────────────────────────────────────────────────┐ │
+    // │ │ SLOW CODE RUN BY COMPILER = FREE                                               │ │
+    // │ │ SLOW CODE RUN BY CPU = SLOW                                                    │ │
+    // │ │                                                                                 │ │
+    // │ │ When you write:                                                                │ │
+    // │ │   constexpr float x = constexpr_sin(pi);                                       │ │
+    // │ │ The 170 multiplications happen in g++, not in ./a.out                         │ │
+    // │ │ CPU just loads 4 bytes → 2.07 ns                                               │ │
+    // │ │                                                                                 │ │
+    // │ │ MORAL: Constexpr code can be SLOPPY because compiler pays the price           │ │
+    // │ └─────────────────────────────────────────────────────────────────────────────────┘ │
+    // └─────────────────────────────────────────────────────────────────────────────────────┘
     
     std::cout << "=== BENCHMARK: CONSTEXPR vs RUNTIME (10 million iterations) ===\n\n";
     
