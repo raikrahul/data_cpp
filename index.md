@@ -68,6 +68,10 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 | 69 | Custom String Implementation             | [69_mystring_lesson.md](https://github.com/raikrahul/data_cpp/blob/master/src/69_mystring_lesson.md) | In Progress |
 | 70 | Copy Ctor vs Assignment                  | [70_copy_ctor_vs_assign.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/70_copy_ctor_vs_assign.cpp) | Done        |
 | 71 | Copy Ctor Assembly                       | [71_copy_ctor_assign_assembly.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/71_copy_ctor_assign_assembly.cpp) | Done        |
+| 72 | VPtr VTable Lesson                       | [72_vptr_vtable_task1.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/72_vptr_vtable_task1.cpp) | Done        |
+| 72A| VPtr VTable Task 2                       | [72_vptr_vtable_task2.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/72_vptr_vtable_task2.cpp) | Done        |
+| 72B| Assembly Axioms                          | [72_assembly_axioms.md](https://github.com/raikrahul/data_cpp/blob/master/src/72_assembly_axioms.md) | Done        |
+| 73 | Variant Animal Visitor                   | [73_variant_animal_visitor.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/73_variant_animal_visitor.cpp) | Done        |
 
 ## Build and Run
 
