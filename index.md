@@ -63,6 +63,11 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 | 66A| Variant Particle System                  | [66_variant_particle_system.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/66_variant_particle_system.cpp) | In Progress |
 | 66B| C-Style Variant                          | [66_c_variant.c](https://github.com/raikrahul/data_cpp/blob/master/src/66_c_variant.c) | Done        |
 | 66E| Variant Error Report                     | [66_variant_error_report.md](https://github.com/raikrahul/data_cpp/blob/master/src/66_variant_error_report.md) | Done        |
+| 67 | Finite Difference Stencil                | [67_finite_difference_stencil.md](https://github.com/raikrahul/data_cpp/blob/master/src/67_finite_difference_stencil.md) | In Progress |
+| 68 | Stencil Variant Lesson                   | [68_stencil_variant_lesson.md](https://github.com/raikrahul/data_cpp/blob/master/src/68_stencil_variant_lesson.md) | In Progress |
+| 69 | Custom String Implementation             | [69_mystring_lesson.md](https://github.com/raikrahul/data_cpp/blob/master/src/69_mystring_lesson.md) | In Progress |
+| 70 | Copy Ctor vs Assignment                  | [70_copy_ctor_vs_assign.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/70_copy_ctor_vs_assign.cpp) | Done        |
+| 71 | Copy Ctor Assembly                       | [71_copy_ctor_assign_assembly.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/71_copy_ctor_assign_assembly.cpp) | Done        |
 
 ## Build and Run
 
