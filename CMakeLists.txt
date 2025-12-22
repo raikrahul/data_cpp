@@ -66,6 +66,7 @@ add_executable(59_constexpr_compiler_interpreter src/59_constexpr_compiler_inter
 add_executable(60_constexpr_chain_and_fallback src/60_constexpr_chain_and_fallback.cpp)
 add_executable(61_constexpr_roundoff_errors src/61_constexpr_roundoff_errors.cpp)
 add_executable(62_polymorphism_benchmark src/62_polymorphism_benchmark.cpp)
+add_executable(63_template_duck_typing src/63_template_duck_typing.cpp)
 find_package(TBB QUIET)
 if(TBB_FOUND)
     target_link_libraries(22_simd_parallel_puzzle TBB::tbb)
