@@ -1,19 +1,47 @@
 cmake_minimum_required(VERSION 3.28)
-project(lecpp LANGUAGES CXX)
+project(lecpp LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Compiler warnings (GCC 14 / Clang 19)
+# C++ Compiler options
+# C++ Compiler options
 add_compile_options(
-    -Wall -Wextra -Wpedantic -Werror
-    -Wshadow -Wconversion -Wsign-conversion
-    -Wnon-virtual-dtor -Wold-style-cast
-    -Wcast-align -Wunused -Woverloaded-virtual
-    -Wnull-dereference -Wdouble-promotion
-    -Wformat=2 -Wimplicit-fallthrough
+    $<$<COMPILE_LANGUAGE:CXX>:-Wall>
+    $<$<COMPILE_LANGUAGE:CXX>:-Wextra>
+    $<$<COMPILE_LANGUAGE:CXX>:-Wpedantic>
+    $<$<COMPILE_LANGUAGE:CXX>:-Werror>
+    $<$<COMPILE_LANGUAGE:CXX>:-Wshadow>
+    $<$<COMPILE_LANGUAGE:CXX>:-Wconversion>
+    $<$<COMPILE_LANGUAGE:CXX>:-Wsign-conversion>
+    $<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor>
+    $<$<COMPILE_LANGUAGE:CXX>:-Wold-style-cast>
+    $<$<COMPILE_LANGUAGE:CXX>:-Wcast-align>
+    $<$<COMPILE_LANGUAGE:CXX>:-Wunused>
+    $<$<COMPILE_LANGUAGE:CXX>:-Woverloaded-virtual>
+    $<$<COMPILE_LANGUAGE:CXX>:-Wnull-dereference>
+    $<$<COMPILE_LANGUAGE:CXX>:-Wdouble-promotion>
+    $<$<COMPILE_LANGUAGE:CXX>:-Wformat=2>
+    $<$<COMPILE_LANGUAGE:CXX>:-Wimplicit-fallthrough>
+)
+
+# C Compiler options
+add_compile_options(
+    $<$<COMPILE_LANGUAGE:C>:-Wall>
+    $<$<COMPILE_LANGUAGE:C>:-Wextra>
+    $<$<COMPILE_LANGUAGE:C>:-Wpedantic>
+    $<$<COMPILE_LANGUAGE:C>:-Werror>
+    $<$<COMPILE_LANGUAGE:C>:-Wshadow>
+    $<$<COMPILE_LANGUAGE:C>:-Wconversion>
+    $<$<COMPILE_LANGUAGE:C>:-Wsign-conversion>
+    $<$<COMPILE_LANGUAGE:C>:-Wcast-align>
+    $<$<COMPILE_LANGUAGE:C>:-Wunused>
+    $<$<COMPILE_LANGUAGE:C>:-Wnull-dereference>
+    $<$<COMPILE_LANGUAGE:C>:-Wdouble-promotion>
+    $<$<COMPILE_LANGUAGE:C>:-Wformat=2>
+    $<$<COMPILE_LANGUAGE:C>:-Wimplicit-fallthrough>
 )
 
 # Debug build: enable sanitizers
@@ -67,6 +95,9 @@ add_executable(60_constexpr_chain_and_fallback src/60_constexpr_chain_and_fallba
 add_executable(61_constexpr_roundoff_errors src/61_constexpr_roundoff_errors.cpp)
 add_executable(62_polymorphism_benchmark src/62_polymorphism_benchmark.cpp)
 add_executable(63_template_duck_typing src/63_template_duck_typing.cpp)
+add_executable(66_variant_mechanics src/66_variant_mechanics.cpp)
+add_executable(66_variant_particle_system src/66_variant_particle_system.cpp)
+add_executable(66_c_variant src/66_c_variant.c)
 find_package(TBB QUIET)
 if(TBB_FOUND)
     target_link_libraries(22_simd_parallel_puzzle TBB::tbb)

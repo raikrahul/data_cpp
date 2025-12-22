@@ -59,6 +59,10 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 | 64E| Finite Difference Derivation             | [64_unrolled_finite_difference.md](https://github.com/raikrahul/data_cpp/blob/master/src/64_unrolled_finite_difference.md) | Done        |
 | 65 | Unroll Dot Product                       | [65_unroll_dot_product.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/65_unroll_dot_product.cpp) | Done        |
 | 65E| Dot Product Error Report                 | [65_unroll_dot_product.md](https://github.com/raikrahul/data_cpp/blob/master/src/65_unroll_dot_product.md) | Done        |
+| 66 | Variant Mechanics                        | [66_variant_mechanics.md](https://github.com/raikrahul/data_cpp/blob/master/src/66_variant_mechanics.md) | Done        |
+| 66A| Variant Particle System                  | [66_variant_particle_system.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/66_variant_particle_system.cpp) | In Progress |
+| 66B| C-Style Variant                          | [66_c_variant.c](https://github.com/raikrahul/data_cpp/blob/master/src/66_c_variant.c) | Done        |
+| 66E| Variant Error Report                     | [66_variant_error_report.md](https://github.com/raikrahul/data_cpp/blob/master/src/66_variant_error_report.md) | Done        |
 
 ## Build and Run
 
