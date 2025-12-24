@@ -72,6 +72,10 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 | 72A| VPtr VTable Task 2                       | [72_vptr_vtable_task2.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/72_vptr_vtable_task2.cpp) | Done        |
 | 72B| Assembly Axioms                          | [72_assembly_axioms.md](https://github.com/raikrahul/data_cpp/blob/master/src/72_assembly_axioms.md) | Done        |
 | 73 | Variant Animal Visitor                   | [73_variant_animal_visitor.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/73_variant_animal_visitor.cpp) | Done        |
+| 74 | Variant Interface Development            | [74_variant_interface_development.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/74_variant_interface_development.cpp) | In Progress |
+| 84 | Virtual Memory Paging                    | [84_virtual_memory_paging.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/84_virtual_memory_paging.cpp) | In Progress |
+| 84E| Virtual Memory Derivation                | [84_virtual_memory_paging.md](https://github.com/raikrahul/data_cpp/blob/master/src/84_virtual_memory_paging.md) | In Progress |
+| 85 | Huge Pages Axiomatic Derivation          | [85_huge_pages_derivation.md](https://github.com/raikrahul/data_cpp/blob/master/src/85_huge_pages_derivation.md) | Done        |
 
 ## Build and Run
 
@@ -91,3 +95,4 @@ as src/44_assembly_virtual_dispatch.s -o 44.o
 gcc 44.o -o 44_test
 ./44_test
 ```
+86_kernel_assembly_errors.md: Error report for kernel module assembly concepts
