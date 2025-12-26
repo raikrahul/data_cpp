@@ -76,6 +76,22 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 | 84 | Virtual Memory Paging                    | [84_virtual_memory_paging.cpp](https://github.com/raikrahul/data_cpp/blob/master/src/84_virtual_memory_paging.cpp) | In Progress |
 | 84E| Virtual Memory Derivation                | [84_virtual_memory_paging.md](https://github.com/raikrahul/data_cpp/blob/master/src/84_virtual_memory_paging.md) | In Progress |
 | 85 | Huge Pages Axiomatic Derivation          | [85_huge_pages_derivation.md](https://github.com/raikrahul/data_cpp/blob/master/src/85_huge_pages_derivation.md) | Done        |
+| 86 | Kernel Assembly Errors                   | [86_kernel_assembly_errors.md](https://github.com/raikrahul/data_cpp/blob/master/src/86_kernel_assembly_errors.md) | Done        |
+| 87 | Relocation Derivation                    | [87_relocation_derivation.md](https://github.com/raikrahul/data_cpp/blob/master/src/87_relocation_derivation.md) | Done        |
+| 88 | Relocation Complete Guide                | [88_relocation_complete_guide.md](https://github.com/raikrahul/data_cpp/blob/master/src/88_relocation_complete_guide.md) | Done        |
+| 89 | Planning Analysis                        | [89_planning_analysis.md](https://github.com/raikrahul/data_cpp/blob/master/src/89_planning_analysis.md) | Done        |
+| 90 | Bitmasking Drills                        | [90_bitmasking_drills.md](https://github.com/raikrahul/data_cpp/blob/master/src/90_bitmasking_drills.md) | Done        |
+| 91 | Memory Management Axioms                 | [91_memory_management_axioms.md](https://github.com/raikrahul/data_cpp/blob/master/src/91_memory_management_axioms.md) | In Progress |
+| 92 | MM Lesson Plan                           | [92_mm_lesson_plan.md](https://github.com/raikrahul/data_cpp/blob/master/src/92_mm_lesson_plan.md) | Done        |
+
+## Kernel Module Demos
+
+| ID | Title                     | Folder                    | Status      |
+|:---|:--------------------------|:--------------------------|:------------|
+| D01| Read CR3 Register         | demo_01_read_cr3/         | Done        |
+| D02| Extract Page Indices      | demo_02_extract_indices/  | Done        |
+| D11| Dump PML4 Table           | demo_11_dump_pml4/        | Done        |
+| D13| Zone Information          | demo_13_zone_info/        | Done        |
 
 ## Build and Run
 
@@ -95,4 +111,15 @@ as src/44_assembly_virtual_dispatch.s -o 44.o
 gcc 44.o -o 44_test
 ./44_test
 ```
-86_kernel_assembly_errors.md: Error report for kernel module assembly concepts
+
+## Kernel Modules
+
+Build and test kernel modules:
+
+```bash
+cd demo_01_read_cr3
+make
+sudo insmod cr3_driver.ko
+cat /proc/demo_cr3
+sudo rmmod cr3_driver
+```

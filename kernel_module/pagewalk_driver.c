@@ -170,6 +170,44 @@ static inline unsigned long read_cr3_val(void) {
 }
 
 /*
+ * PROOF: KERNEL PAGE TABLES ARE SHARED
+ * =====================================
+ * Read PML4[276] directly using CR3.
+ * Run from different processes.
+ * Value should be IDENTICAL.
+ */
+static void prove_kernel_sharing(char* buf, int* len, size_t buflen) {
+    unsigned long cr3 = read_cr3_val();
+    unsigned long pml4_phys = cr3 & ~0xFFF;
+
+    /* Convert physical to virtual using kernel direct mapping */
+    unsigned long* pml4_virt = (unsigned long*)__va(pml4_phys);
+
+    /* Read entry 276 (kernel region) */
+    unsigned long entry_276 = pml4_virt[276];
+
+    /* Read entry 0 (user region) - should differ between processes */
+    unsigned long entry_0 = pml4_virt[0];
+
+    *len += snprintf(buf + *len, buflen - *len,
+                     "\nPROOF: KERNEL PAGE TABLE SHARING\n"
+                     "─────────────────────────────────────────────────────────────────────────\n"
+                     "Process: %s (PID %d)\n"
+                     "CR3 (this process): 0x%016lx\n"
+                     "PML4 physical base: 0x%016lx\n"
+                     "PML4 virtual base:  0x%016lx\n"
+                     "\n"
+                     "PML4[0]   (USER)   = 0x%016lx  ← DIFFERENT per process\n"
+                     "PML4[276] (KERNEL) = 0x%016lx  ← SAME for all processes\n"
+                     "\n"
+                     "Run: echo 'proof' > /proc/pagewalk from different terminals.\n"
+                     "PML4[276] should show IDENTICAL value.\n"
+                     "PML4[0] should show DIFFERENT values.\n",
+                     current->comm, current->pid, cr3, pml4_phys, (unsigned long)pml4_virt, entry_0,
+                     entry_276);
+}
+
+/*
  * FUNCTION: walk_page_tables
  * --------------------------
  * What: Traverses 4 levels of page tables (PML4 -> PDPT -> PD -> PT -> Phys).
@@ -249,41 +287,327 @@ static inline unsigned long read_cr3_val(void) {
  *    Usually PML4[0] is NOT present for NULL to trap segfaults.
  *    ∴ Walk stops at Step 1 → Result = FAULT.
  */
-static int walk_page_tables(unsigned long vaddr, char* buf, size_t buflen) {
-    int len = 0;
-    unsigned long cr3;
-    pgd_t* pgd;
-    p4d_t* p4d;
-    pud_t* pud;
-    pmd_t* pmd;
-    pte_t* pte;
-    struct mm_struct* mm = current->mm;
 
-    /* Definitions corresponding to 4-level paging constants */
-    /* PAGE_SHIFT = 12 (4KB pages) → Offset bits = 12 */
-    /* PMD_SHIFT  = 21 (2MB pages) → PT bits = 9 */
-    /* PUD_SHIFT  = 30 (1GB pages) → PD bits = 9 */
-    /* PGDIR_SHIFT= 39 (512GB)     → PDPT bits = 9 */
+/* ═══════════════════════════════════════════════════════════════════════════
+ * OUTPUT HELPERS: Reduce snprintf verbosity
+ * ═══════════════════════════════════════════════════════════════════════════ */
+#define OUT(fmt, ...) len += snprintf(buf + len, buflen - len, fmt, ##__VA_ARGS__)
+#define LINE "─────────────────────────────────────────────────────────────────────────\n"
+#define DLINE "═══════════════════════════════════════════════════════════════════════\n"
+#define YN(x) ((x) ? "Y" : "N")
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * FUNCTION: walk_page_tables
+ * ═══════════════════════════════════════════════════════════════════════════
+ * INPUT:  vaddr  = 0xffff8a5d40b95400 (virtual address of cat's task_struct)
+ *         buf    = 0xffff8a5d50000000 (kernel buffer, 8192 bytes)
+ *         buflen = 8192 (0x2000)
+ * OUTPUT: int len = number of bytes written to buf (typically 700-800)
+ *
+ * CALLER: proc_read() at LINE 559 when user does: cat /proc/pagewalk
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * W-QUESTIONS WITH NUMERICAL EXAMPLES
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * WHAT: 4 RAM reads + 5 index extractions + 1 final OR.
+ *   RAM reads: 4 × 8 bytes = 32 bytes from 4 different pages.
+ *   Index extractions: (vaddr >> N) & 0x1FF, 5 times (N=39,30,21,12,0).
+ *   Final calculation: (PFN << 12) | offset.
+ *   EXAMPLE: Book lookup = shelf[276] → row[373] → column[5] → page[405] → char[1024].
+ *
+ * WHY: CPU sees virtual 0xffff8a5d40b95400, RAM chip needs physical 0x100b95400.
+ *   Virtual space = 256 TB (2^48 bytes) per process.
+ *   Physical RAM = 16 GB on your machine.
+ *   256 TB / 16 GB = 16384:1 ratio. Most virtual addresses unmapped.
+ *   EXAMPLE: 100 apartment mailboxes → 5 actual apartments → forwarding table needed.
+ *
+ * WHERE: 4 RAM locations (physical addresses):
+ *   [1] 0x24fb278A0 = PML4[276]  (page table page 1)
+ *   [2] 0x393c01BA8 = PDPT[373]  (page table page 2)
+ *   [3] 0x10163b028 = PD[5]      (page table page 3)
+ *   [4] 0x1ad4fdCA8 = PT[405]    (page table page 4)
+ *   Total RAM touched = 4 cache lines × 64 bytes = 256 bytes worst case.
+ *   EXAMPLE: City→District→Street→Building→Room = 5 lookups.
+ *
+ * WHO: CPU hardware (MMU) + kernel software (this function).
+ *   MMU does this in ~100-400 cycles per TLB miss.
+ *   This function does same walk in software, ~10000 cycles (interpreted).
+ *   TLB hit = 1 cycle. TLB miss = 400 cycles. Ratio = 400:1.
+ *   EXAMPLE: Cache=librarian memory, RAM=card catalog, Disk=warehouse.
+ *
+ * WHEN: On every TLB miss for this virtual page.
+ *   Your TLB = 3072 entries.
+ *   Each entry covers 4KB.
+ *   TLB coverage = 3072 × 4KB = 12 MB.
+ *   Your RAM = 16 GB.
+ *   TLB coverage / RAM = 12 MB / 16 GB = 0.073%.
+ *   99.927% of RAM addresses → TLB miss → page walk.
+ *   EXAMPLE: 100 item menu, waiter remembers 3. 97% of orders need lookup.
+ *
+ * WITHOUT: Flat page table = 2^48 / 4KB = 2^36 entries = 64 billion entries.
+ *   64 billion × 8 bytes = 512 GB per process.
+ *   Your RAM = 16 GB. Impossible.
+ *   WITH hierarchical: Only allocate used tables.
+ *   cat process uses ~100 pages = ~100 PT entries + 1 PD + 1 PDPT + 1 PML4.
+ *   Actual memory = 4 pages × 4KB = 16 KB (not 512 GB).
+ *   Savings = 512 GB / 16 KB = 32 million : 1.
+ *   EXAMPLE: Phone book for 1 billion people vs sparse index for 100 contacts.
+ *
+ * WHICH: 4 indices select which entry at each level.
+ *   PML4: 512 entries, index 276 selected. 276/512 = 53.9% into table.
+ *   PDPT: 512 entries, index 373 selected. 373/512 = 72.9% into table.
+ *   PD:   512 entries, index 5 selected.   5/512 = 0.98% into table.
+ *   PT:   512 entries, index 405 selected. 405/512 = 79.1% into table.
+ *   Offset: 4096 bytes, position 1024.     1024/4096 = 25% into page.
+ *   EXAMPLE: ISBN 978-3-16-148410-0 → publisher[978] → group[3] → title[16] → check[0].
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * COMPLETE WORKED EXAMPLE: 0xffff8a5d40b95400 → 0x100b95400
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * INPUT: vaddr = 0xffff8a5d40b95400
+ *
+ * STEP 0: Read CR3 = 0x24fb27000. PML4 physical base = 0x24fb27000.
+ *
+ * STEP 1: PML4 lookup.
+ *   Index = (0xffff8a5d40b95400 >> 39) & 0x1FF = 276.
+ *   Address = 0x24fb27000 + 276*8 = 0x24fb27000 + 0x8A0 = 0x24fb278A0.
+ *   RAM read: RAM[0x24fb278A0] = 0x393c01067.
+ *   Next base = 0x393c01000.
+ *
+ * STEP 2: PDPT lookup.
+ *   Index = (0xffff8a5d40b95400 >> 30) & 0x1FF = 373.
+ *   Address = 0x393c01000 + 373*8 = 0x393c01000 + 0xBA8 = 0x393c01BA8.
+ *   RAM read: RAM[0x393c01BA8] = 0x10163b063.
+ *   Next base = 0x10163b000.
+ *
+ * STEP 3: PD lookup.
+ *   Index = (0xffff8a5d40b95400 >> 21) & 0x1FF = 5.
+ *   Address = 0x10163b000 + 5*8 = 0x10163b000 + 0x28 = 0x10163b028.
+ *   RAM read: RAM[0x10163b028] = 0x1ad4fd063.
+ *   Next base = 0x1ad4fd000.
+ *
+ * STEP 4: PT lookup.
+ *   Index = (0xffff8a5d40b95400 >> 12) & 0x1FF = 405.
+ *   Address = 0x1ad4fd000 + 405*8 = 0x1ad4fd000 + 0xCA8 = 0x1ad4fdCA8.
+ *   RAM read: RAM[0x1ad4fdCA8] = 0x8000000100b95163.
+ *   PFN = 0x100b95.
+ *
+ * STEP 5: Final address.
+ *   Offset = 0xffff8a5d40b95400 & 0xFFF = 0x400.
+ *   Physical = (0x100b95 << 12) | 0x400 = 0x100b95000 | 0x400 = 0x100b95400.
+ *
+ * RESULT: Virtual 0xffff8a5d40b95400 → Physical 0x100b95400.
+ *
+ * TIMING:
+ *   4 RAM reads × 100 cycles/read = 400 cycles.
+ *   At 3.0 GHz = 400 / 3,000,000,000 = 133 nanoseconds per TLB miss.
+ *   TLB hit = 0.3 nanoseconds.
+ *   Slowdown on miss = 133 / 0.3 = 443×.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+static int walk_page_tables(unsigned long vaddr, char* buf, size_t buflen) {
+    /*
+     * STACK FRAME LAYOUT (approximate):
+     * ┌─────────────────────────────────────────────────────────────────┐
+     * │ rbp-0x08: len      (4 bytes, padded to 8)    = 0                │
+     * │ rbp-0x10: cr3      (8 bytes)                 = UNINIT→0x24fb27000
+     * │ rbp-0x18: pgd      (8 bytes, pointer)        = UNINIT→0xFFFF888024fb278A0
+     * │ rbp-0x20: p4d      (8 bytes, pointer)        = UNINIT→same as pgd
+     * │ rbp-0x28: pud      (8 bytes, pointer)        = UNINIT→0xFFFF888393c01BA8
+     * │ rbp-0x30: pmd      (8 bytes, pointer)        = UNINIT→0xFFFF88810163b028
+     * │ rbp-0x38: pte      (8 bytes, pointer)        = UNINIT→0xFFFF8881ad4fdCA8
+     * │ rbp-0x40: mm       (8 bytes, pointer)        = current->mm
+     * │ rbp-0x48: pml4_idx (8 bytes)                 = 276
+     * │ rbp-0x50: pdpt_idx (8 bytes)                 = 373
+     * │ rbp-0x58: pd_idx   (8 bytes)                 = 5
+     * │ rbp-0x60: pt_idx   (8 bytes)                 = 405
+     * │ rbp-0x68: offset   (8 bytes)                 = 1024 (0x400)
+     * └─────────────────────────────────────────────────────────────────┘
+     * Total stack: ~0x70 = 112 bytes
+     */
+    int len = 0;       /* len=0. Tracks position in output buffer. buf[0..len-1] = written. */
+    unsigned long cr3; /* cr3=UNINIT. Will hold CPU CR3 register = 0x24fb27000. */
+    pgd_t* pgd;        /* pgd=UNINIT. Pointer to PML4 entry. Will be 0xFFFF888024fb278A0. */
+    p4d_t* p4d;        /* p4d=UNINIT. Pointer to P4D entry. On 4-level = same as pgd. */
+    pud_t* pud;        /* pud=UNINIT. Pointer to PDPT entry. Will be 0xFFFF888393c01BA8. */
+    pmd_t* pmd;        /* pmd=UNINIT. Pointer to PD entry. Will be 0xFFFF88810163b028. */
+    pte_t* pte;        /* pte=UNINIT. Pointer to PT entry. Will be 0xFFFF8881ad4fdCA8. */
 
     /*
-     * CALCULATION: Index Extraction
-     * VA >> 39 gets top 9 bits (47:39) after sign extension removal.
-     * Mask 0x1FF (511) ensures strictly 9 bits.
-     * Example: 0xffffce42db407b74 >> 39
-     *          = 1111...1100111001...
-     *          Wait, shift arithmetic right? Yes.
-     *          (0xce42... >> 39) & 0x1ff = 412.
+     * mm = current->mm
+     * current = per-CPU variable pointing to running task_struct (cat process)
+     * current = 0xffff8a5d40b95400
+     * current->mm offset ~0x??? = 0xffff8a5d41234000 (example)
+     * mm->pgd = virtual address of PML4 table = 0xFFFF888024fb27000
      */
-    unsigned long pml4_idx = (vaddr >> 39) & 0x1FF;
-    unsigned long pdpt_idx = (vaddr >> 30) & 0x1FF;
-    unsigned long pd_idx = (vaddr >> 21) & 0x1FF;
-    unsigned long pt_idx = (vaddr >> 12) & 0x1FF;
-    unsigned long offset = vaddr & 0xFFF;
+    struct mm_struct* mm = current->mm;
 
-    len += snprintf(buf + len, buflen - len,
-                    "═══════════════════════════════════════════════════════════════════════\n"
-                    "KERNEL-LEVEL PAGE TABLE WALK\n"
-                    "═══════════════════════════════════════════════════════════════════════\n\n");
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * INDEX & OFFSET EXTRACTION FROM VIRTUAL ADDRESS
+     * ═══════════════════════════════════════════════════════════════════════
+     * vaddr = 0xffff8a5d40b95400
+     *
+     * 64-bit layout:
+     * ┌────────────┬─────────┬─────────┬─────────┬─────────┬────────────┐
+     * │ 63:48      │ 47:39   │ 38:30   │ 29:21   │ 20:12   │ 11:0       │
+     * │ Sign Ext   │ PML4    │ PDPT    │ PD      │ PT      │ Offset     │
+     * │ (unused)   │ 9 bits  │ 9 bits  │ 9 bits  │ 9 bits  │ 12 bits    │
+     * └────────────┴─────────┴─────────┴─────────┴─────────┴────────────┘
+     *
+     * Binary of 0xffff8a5d40b95400:
+     * 1111 1111 1111 1111 1000 1010 0101 1101 0100 0000 1011 1001 0101 0100 0000 0000
+     * ↑bit63                                                                    bit0↑
+     */
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * pml4_idx = (vaddr >> 39) & 0x1FF
+     * ═══════════════════════════════════════════════════════════════════════
+     * ANSWER FIRST: pml4_idx = 276
+     *
+     * AXIOM 1: >> is right shift. Each bit moves right. Vacated bits filled.
+     * AXIOM 2: & is bitwise AND. 1&1=1, 1&0=0, 0&1=0, 0&0=0.
+     * AXIOM 3: 0x1FF = 511 = 2^9 - 1 = 9 bits of 1s.
+     *
+     * DERIVATION FROM SCRATCH:
+     * ─────────────────────────────────────────────────────────────────────────
+     * 01. vaddr = 0xffff8a5d40b95400.
+     * 02. Convert to binary (64 bits):
+     *     0xf = 1111, 0xf = 1111, 0xf = 1111, 0xf = 1111,
+     *     0x8 = 1000, 0xa = 1010, 0x5 = 0101, 0xd = 1101,
+     *     0x4 = 0100, 0x0 = 0000, 0xb = 1011, 0x9 = 1001,
+     *     0x5 = 0101, 0x4 = 0100, 0x0 = 0000, 0x0 = 0000.
+     * 03. Full binary:
+     *     1111 1111 1111 1111 1000 1010 0101 1101 0100 0000 1011 1001 0101 0100 0000 0000
+     *     bit63─────────────────────────────────────────────────────────────────────bit0
+     * 04. Label bit positions:
+     *     [63:48] = 1111 1111 1111 1111 (sign extension, 0xFFFF)
+     *     [47:39] = 1 0001 0100 (9 bits we need)
+     *     [38:30] = 1 0111 0101
+     *     [29:21] = 0 0000 0101
+     *     [20:12] = 1 1001 0101
+     *     [11:0]  = 0100 0000 0000
+     * 05. Extract bits [47:39]:
+     *     >> 39 shifts bits [47:39] into positions [8:0].
+     *     After shift: 0x1ffff114 (all upper bits become 1s due to sign extend).
+     * 06. Apply mask 0x1FF:
+     *     0x1ffff114 & 0x1FF = 0x114.
+     * 07. 0x114 in decimal: 1×256 + 1×16 + 4×1 = 276.
+     *
+     * VERIFICATION:
+     *     276 = 0b1_0001_0100
+     *     bit8=1 → 256, bit4=1 → 16, bit2=1 → 4
+     *     256 + 16 + 4 = 276 ✓
+     *
+     * HARDER PUZZLE (same technique):
+     * ─────────────────────────────────────────────────────────────────────────
+     * Given: x = 0xDEADBEEFCAFEBABE
+     * Find: (x >> 39) & 0x1FF
+     *
+     * 01. x = 0xDEADBEEFCAFEBABE
+     * 02. Binary of 0xD = 1101, 0xE = 1110, 0xA = 1010, 0xD = 1101,
+     *              0xB = 1011, 0xE = 1110, 0xE = 1110, 0xF = 1111,
+     *              0xC = 1100, 0xA = 1010, 0xF = 1111, 0xE = 1110,
+     *              0xB = 1011, 0xA = 1010, 0xB = 1011, 0xE = 1110.
+     * 03. Bits [47:39]:
+     *     Bit 47 is in byte at offset 5 from right (byte 5 = 0xEF).
+     *     Position 47 = bit 7 of byte 5.
+     *     Bits [47:40] = 1110 1111 = 0xEF.
+     *     Bit [39] = bit 7 of 0xCA = 1.
+     *     Bits [47:39] = 1 1101 1111 = 0x1DF = 479.
+     * 04. (0xDEADBEEFCAFEBABE >> 39) & 0x1FF = 479.
+     * 05. Verify: 479 = 256 + 128 + 64 + 16 + 8 + 4 + 2 + 1 = 479 ✓
+     */
+    unsigned long pml4_idx = (vaddr >> 39) & 0x1FF; /* = 276 */
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * pdpt_idx = (vaddr >> 30) & 0x1FF
+     * ═══════════════════════════════════════════════════════════════════════
+     * ANSWER FIRST: pdpt_idx = 373
+     *
+     * DERIVATION:
+     * 01. vaddr = 0xffff8a5d40b95400.
+     * 02. Bits [38:30] = ?
+     * 03. From binary above: 1 0111 0101.
+     * 04. 0x175 = 1×256 + 7×16 + 5×1 = 256 + 112 + 5 = 373.
+     *
+     * HARDER PUZZLE:
+     * Given: y = 0x123456789ABCDEF0
+     * Find: (y >> 30) & 0x1FF
+     * 01. Bits [38:30]:
+     *     y >> 30 = 0x48D159E.
+     *     0x48D159E & 0x1FF = 0x19E = 414.
+     * 02. 414 = 256 + 128 + 16 + 8 + 4 + 2 = 414 ✓
+     */
+    unsigned long pdpt_idx = (vaddr >> 30) & 0x1FF; /* = 373 */
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * pd_idx = (vaddr >> 21) & 0x1FF
+     * ═══════════════════════════════════════════════════════════════════════
+     * ANSWER FIRST: pd_idx = 5
+     *
+     * DERIVATION:
+     * 01. Bits [29:21] from binary: 0 0000 0101 = 5.
+     * 02. Verify: 5 = 4 + 1 = 5 ✓
+     *
+     * EDGE CASE PUZZLE:
+     * What if pd_idx = 511 (maximum)?
+     * vaddr bits [29:21] = 1 1111 1111.
+     * This means vaddr & 0x3FE00000 = 0x3FE00000 (mask for bits 29:21).
+     * 511 × 2^21 = 511 × 2097152 = 1,071,644,672.
+     * Within PD, entry 511 is at offset 511 × 8 = 4088 = 0xFF8.
+     * Last entry before 4KB boundary.
+     */
+    unsigned long pd_idx = (vaddr >> 21) & 0x1FF; /* = 5 */
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * pt_idx = (vaddr >> 12) & 0x1FF
+     * ═══════════════════════════════════════════════════════════════════════
+     * ANSWER FIRST: pt_idx = 405
+     *
+     * DERIVATION:
+     * 01. Bits [20:12] from binary: 1 1001 0101.
+     * 02. 0x195 = 1×256 + 9×16 + 5×1 = 256 + 144 + 5 = 405.
+     *
+     * REVERSE PUZZLE:
+     * Given pt_idx = 405, what bits are set?
+     * 405 = 256 + 128 + 16 + 4 + 1 = 0b110010101.
+     * Bits: 8,7,4,2,0 are set.
+     * Position in PT: 405 × 8 = 3240 bytes = 0xCA8.
+     * 3240 / 64 = 50.625 → spans cache lines 50 and 51.
+     */
+    unsigned long pt_idx = (vaddr >> 12) & 0x1FF; /* = 405 */
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * offset = vaddr & 0xFFF
+     * ═══════════════════════════════════════════════════════════════════════
+     * ANSWER FIRST: offset = 0x400 = 1024
+     *
+     * DERIVATION:
+     * 01. 0xFFF = 4095 = 2^12 - 1 = 12 bits of 1s.
+     * 02. vaddr & 0xFFF keeps only bits [11:0].
+     * 03. From binary: 0100 0000 0000 = 0x400 = 1024.
+     *
+     * SCALING PUZZLE:
+     * 1024 bytes into 4096 byte page = 1024/4096 = 25%.
+     * If page is memory-mapped file, byte 1024 = character 1024.
+     * If page is struct array with sizeof=128:
+     *     Element index = 1024 / 128 = 8.
+     *     Offset within element = 1024 % 128 = 0.
+     *     So accessing arr[8] exactly.
+     */
+    unsigned long offset = vaddr & 0xFFF; /* = 0x400 = 1024 */
+
+    OUT(DLINE "KERNEL-LEVEL PAGE TABLE WALK\n" DLINE "\n");
 
     /*
      * READ CR3
@@ -291,228 +615,448 @@ static int walk_page_tables(unsigned long vaddr, char* buf, size_t buflen) {
      * Cycles: ~few.
      */
     cr3 = read_cr3_val();
-    len += snprintf(buf + len, buflen - len,
-                    "STEP 0: READ CR3 REGISTER\n"
-                    "─────────────────────────────────────────────────────────────────────────\n"
-                    "CR3 = 0x%016lx\n"
-                    "├─ Bits 51:12 = PML4 physical base = 0x%016lx\n"
-                    "├─ Bits 11:0  = PCID (Process Context ID) = %lu\n"
-                    "└─ PML4 table is at physical address 0x%lx\n\n",
-                    cr3, cr3 & ~0xFFF, cr3 & 0xFFF, cr3 & ~0xFFF);
+    OUT("STEP 0: CR3\n" LINE "CR3=0x%016lx PML4@0x%lx PCID=%lu\n\n", cr3, cr3 & ~0xFFF,
+        cr3 & 0xFFF);
 
-    len += snprintf(buf + len, buflen - len,
-                    "VIRTUAL ADDRESS BREAKDOWN: 0x%016lx\n"
-                    "─────────────────────────────────────────────────────────────────────────\n"
-                    "├─ PML4 index (bits 47:39) = %lu\n"
-                    "├─ PDPT index (bits 38:30) = %lu\n"
-                    "├─ PD index   (bits 29:21) = %lu\n"
-                    "├─ PT index   (bits 20:12) = %lu\n"
-                    "└─ Offset     (bits 11:0)  = %lu (0x%lx)\n\n",
-                    vaddr, pml4_idx, pdpt_idx, pd_idx, pt_idx, offset, offset);
+    OUT("VA=0x%016lx → PML4[%lu] PDPT[%lu] PD[%lu] PT[%lu] OFF=0x%lx\n\n", vaddr, pml4_idx,
+        pdpt_idx, pd_idx, pt_idx, offset);
 
     if (!mm) {
-        len += snprintf(buf + len, buflen - len, "ERROR: No mm_struct for current process\n");
+        OUT("ERR: mm=NULL\n");
         return len;
     }
 
-    /* Walk using kernel functions */
-    len +=
-        snprintf(buf + len, buflen - len,
-                 "PAGE TABLE WALK (REAL ENTRIES FROM YOUR KERNEL)\n"
-                 "─────────────────────────────────────────────────────────────────────────\n\n");
+    OUT("PAGE TABLE WALK:\n" LINE);
 
     /*
-     * STEP 1: PML4 (Level 4)
-     * ----------------------
-     * Input: CR3 (Physical Base) + PML4_Index (412)
-     * Operation: PhysAddr = (CR3 & Mask) + (412 * 8)
-     * Memory Read: 1 cache line (64 bytes).
-     * Output: PGD (Page Global Directory) Entry.
-     *         pgd_val = 0x100000067
-     *         Bits[12..51] = 0x100000 (Next Level Base PFN)
-     *         Bit[0] = 1 (Present)
-     *         Bit[1] = 1 (RW)
-     *         Bit[2] = 1 (User)
+     * ═══════════════════════════════════════════════════════════════════════
+     * STEP 1: PML4 LOOKUP (Level 4)
+     * ═══════════════════════════════════════════════════════════════════════
+     * CALL: pgd = pgd_offset(mm, vaddr)
+     * ─────────────────────────────────────────────────────────────────────────
+     * INPUT:  mm = current->mm (pointer to mm_struct)
+     *         mm->pgd = 0xFFFF888024fb27000 (virtual address of PML4 table)
+     *         vaddr = 0xffff8a5d40b95400
+     *         pml4_idx = 276 (already calculated)
+     *
+     * OPERATION:
+     *   pgd_offset(mm, vaddr) expands to:
+     *     pgd_offset_pgd(mm->pgd, vaddr)
+     *   which does:
+     *     mm->pgd + pgd_index(vaddr)
+     *   = mm->pgd + pml4_idx
+     *   = 0xFFFF888024fb27000 + 276
+     *
+     * POINTER ARITHMETIC:
+     *   pgd_t is 8 bytes (64-bit entry).
+     *   Adding 276 to pgd_t* = adding 276 × 8 = 2208 bytes.
+     *   2208 in hex: 2208 / 16 = 138 rem 0 → 0
+     *                138 / 16 = 8 rem 10 → A
+     *                8 / 16 = 0 rem 8 → 8
+     *   2208 = 0x8A0.
+     *
+     * RESULT:
+     *   pgd = 0xFFFF888024fb27000 + 0x8A0 = 0xFFFF888024fb278A0
+     *   This is VIRTUAL address of PML4[276].
+     *
+     * RAM READ (on *pgd dereference):
+     *   Virtual 0xFFFF888024fb278A0 → Physical 0x24fb278A0
+     *   CPU reads 8 bytes from RAM[0x24fb278A0].
+     *   RAM[0x24fb278A0] = 0x0000000393c01067
+     *
+     * ┌─────────────────────────────────────────────────────────────────────┐
+     * │ PML4 TABLE (512 entries × 8 bytes = 4096 bytes)                    │
+     * │ Physical Base: 0x24fb27000                                          │
+     * │ Virtual Base:  0xFFFF888024fb27000                                  │
+     * ├─────────────────────────────────────────────────────────────────────┤
+     * │ [0]   @ +0x000 = 0x0000000000000000 (Not Present)                  │
+     * │ [1]   @ +0x008 = ...                                                │
+     * │ ...                                                                 │
+     * │ [276] @ +0x8A0 = 0x0000000393c01067  ← WE READ THIS                │
+     * │       Bit[0]=1 (Present), Bits[51:12]=0x393c01 → PDPT @0x393c01000 │
+     * │ ...                                                                 │
+     * │ [511] @ +0xFF8 = ...                                                │
+     * └─────────────────────────────────────────────────────────────────────┘
      */
-    pgd = pgd_offset(mm, vaddr);
-    len += snprintf(buf + len, buflen - len,
-                    "STEP 1: PML4 (Page Global Directory)\n"
-                    "├─ PML4 entry address = pgd_offset(mm, 0x%lx)\n"
-                    "├─ PML4[%lu] raw value = 0x%016lx\n"
-                    "├─ PGD present? = %s\n",
-                    vaddr, pml4_idx, pgd_val(*pgd), pgd_present(*pgd) ? "YES" : "NO");
+    pgd = pgd_offset(mm, vaddr); /* pgd = 0xFFFF888024fb278A0 */
+
+    /*
+     * pgd_val(*pgd) = dereference pgd pointer.
+     * CPU issues: mov (%rax), %rbx where rax=0xFFFF888024fb278A0.
+     * MMU translates 0xFFFF888024fb278A0 → 0x24fb278A0 (via these same page tables).
+     * Bus reads RAM[0x24fb278A0] → returns 0x0000000393c01067.
+     *
+     * pgd_present(*pgd) = 0x393c01067 & 1 = 1 = TRUE.
+     */
+    OUT("L4:PML4[%lu]=0x%016lx P=%s\n", pml4_idx, pgd_val(*pgd), YN(pgd_present(*pgd)));
+    /* OUTPUT: L4:PML4[276]=0x0000000393c01067 P=Y */
 
     if (!pgd_present(*pgd)) {
-        len += snprintf(buf + len, buflen - len, "└─ WALK STOPPED: PGD not present\n");
+        OUT("STOP:L4\n");
         return len;
     }
 
-    len += snprintf(buf + len, buflen - len, "└─ Points to PDPT at physical: 0x%lx\n\n",
-                    pgd_val(*pgd) & PTE_PFN_MASK);
+    /*
+     * EXTRACT NEXT TABLE ADDRESS:
+     * pgd_val(*pgd) & PTE_PFN_MASK = 0x393c01067 & 0x000FFFFFFFFFF000
+     * Bits [51:12] = 0x393c01
+     * PDPT physical base = 0x393c01 << 12 = 0x393c01000
+     */
+    OUT("→PDPT@0x%lx\n", pgd_val(*pgd) & PTE_PFN_MASK);
+    /* OUTPUT: →PDPT@0x393c01000 */
 
     /*
-     * STEP 2: P4D
-     * -----------
-     * Note: Linux supports 5-level paging. On 4-level systems, P4D is 'folded'.
-     * Conceptual: P4D table has 1 entry, mapping directly to PDPT.
-     * Actual: p4d_offset(pgd) simply casts pgd to p4d.
-     * Value remains 0x100000067.
+     * ═══════════════════════════════════════════════════════════════════════
+     * STEP 2: P4D (5-Level Placeholder, FOLDED on 4-level)
+     * ═══════════════════════════════════════════════════════════════════════
+     * On 4-level paging (your system), P4D doesn't exist.
+     * p4d_offset(pgd, vaddr) returns pgd unchanged.
+     * This is a kernel abstraction for 5-level paging compatibility.
+     *
+     * p4d = pgd = 0xFFFF888024fb278A0
+     * *p4d = *pgd = 0x393c01067 (same value)
      */
-    p4d = p4d_offset(pgd, vaddr);
-    len += snprintf(buf + len, buflen - len,
-                    "STEP 2: P4D (5-level placeholder, pass-through on 4-level)\n"
-                    "├─ P4D raw value = 0x%016lx\n"
-                    "├─ P4D present? = %s\n",
-                    p4d_val(*p4d), p4d_present(*p4d) ? "YES" : "NO");
+    p4d = p4d_offset(pgd, vaddr); /* p4d = pgd = 0xFFFF888024fb278A0 */
+    OUT("L4b:P4D=0x%016lx P=%s (folded)\n", p4d_val(*p4d), YN(p4d_present(*p4d)));
+    /* OUTPUT: L4b:P4D=0x0000000393c01067 P=Y (folded) */
 
     if (!p4d_present(*p4d)) {
-        len += snprintf(buf + len, buflen - len, "└─ WALK STOPPED: P4D not present\n");
+        OUT("STOP:P4D\n");
         return len;
     }
-    len += snprintf(buf + len, buflen - len, "\n");
 
     /*
-     * STEP 3: PDPT (Level 3)
-     * ----------------------
-     * Input: PGD Phys Base (0x100000000) + PDPT_Index (267)
-     * Operation: 0x100000000 + (267 * 8) = 0x100000858
-     * Memory Read: 1 cache line.
-     * Output: PUD (Page Upper Directory) Entry.
-     *         pud_val = 0x1002c1067
-     *         Next Base = 0x1002c1000
-     * Check: Bit[7] (PS - Page Size). If 1, this is a 1GB Huge Page.
-     *        Here 0x...067 → Bit 7 is 0 (0x67 = 01100111).
-     *        ∴ Not Huge. Continuing to Level 2.
+     * ═══════════════════════════════════════════════════════════════════════
+     * STEP 3: PDPT LOOKUP (Level 3 - Page Directory Pointer Table)
+     * ═══════════════════════════════════════════════════════════════════════
+     * CALL: pud = pud_offset(p4d, vaddr)
+     * ─────────────────────────────────────────────────────────────────────────
+     * INPUT:
+     *   p4d value = 0x393c01067 (from previous step)
+     *   pdpt_idx = 373
+     *
+     * OPERATION:
+     *   1. Extract PDPT base from p4d entry:
+     *      0x393c01067 & PTE_PFN_MASK = 0x393c01067 & 0x000FFFFFFFFFF000
+     *      = 0x393c01000 (physical address of PDPT table)
+     *
+     *   2. Convert physical to virtual:
+     *      __va(0x393c01000) = 0xFFFF888000000000 + 0x393c01000
+     *      = 0xFFFF888393c01000 (virtual address of PDPT table)
+     *
+     *   3. Add index offset:
+     *      pdpt_idx = 373
+     *      Offset = 373 × 8 = 2984 bytes
+     *      2984 in hex: 2984 / 16 = 186 rem 8 → 8
+     *                   186 / 16 = 11 rem 10 → A
+     *                   11 / 16 = 0 rem 11 → B
+     *      2984 = 0xBA8
+     *
+     *      pud = 0xFFFF888393c01000 + 0xBA8 = 0xFFFF888393c01BA8
+     *
+     * RAM READ (on *pud dereference):
+     *   Virtual 0xFFFF888393c01BA8 → Physical 0x393c01BA8
+     *   CPU reads 8 bytes from RAM[0x393c01BA8].
+     *   RAM[0x393c01BA8] = 0x000000010163b063
+     *
+     * ┌─────────────────────────────────────────────────────────────────────┐
+     * │ PDPT TABLE (512 entries × 8 bytes = 4096 bytes)                    │
+     * │ Physical Base: 0x393c01000                                          │
+     * │ Virtual Base:  0xFFFF888393c01000                                   │
+     * ├─────────────────────────────────────────────────────────────────────┤
+     * │ [0]   @ +0x000 = ...                                                │
+     * │ ...                                                                 │
+     * │ [373] @ +0xBA8 = 0x000000010163b063  ← WE READ THIS                │
+     * │       Bit[0]=1 (Present), Bit[7]=0 (Not 1GB Huge)                  │
+     * │       Bits[51:12]=0x10163b → PD @0x10163b000                        │
+     * │ ...                                                                 │
+     * │ [511] @ +0xFF8 = ...                                                │
+     * └─────────────────────────────────────────────────────────────────────┘
+     *
+     * FLAG CHECK: Is this a 1GB Huge Page?
+     *   pud_leaf(*pud) = (0x10163b063 >> 7) & 1 = 0x10163b063 & 0x80 = 0
+     *   0x63 = 0110 0011 in binary. Bit 7 = 0.
+     *   → NOT a 1GB huge page. Continue to Level 2.
      */
-    pud = pud_offset(p4d, vaddr);
-    len += snprintf(buf + len, buflen - len,
-                    "STEP 3: PDPT (Page Directory Pointer Table)\n"
-                    "├─ PDPT[%lu] raw value = 0x%016lx\n"
-                    "├─ PUD present? = %s\n"
-                    "├─ PUD huge (1GB page)? = %s\n",
-                    pdpt_idx, pud_val(*pud), pud_present(*pud) ? "YES" : "NO",
-                    pud_leaf(*pud) ? "YES" : "NO");
+    pud = pud_offset(p4d, vaddr); /* pud = 0xFFFF888393c01BA8 */
+
+    /*
+     * pud_val(*pud) = dereference pud.
+     * RAM[0x393c01BA8] = 0x000000010163b063
+     * pud_present = 0x10163b063 & 1 = 1 = TRUE
+     * pud_leaf = 0x10163b063 & 0x80 = 0 = FALSE (not 1GB huge)
+     */
+    OUT("L3:PDPT[%lu]=0x%016lx P=%s H=%s\n", pdpt_idx, pud_val(*pud), YN(pud_present(*pud)),
+        YN(pud_leaf(*pud)));
+    /* OUTPUT: L3:PDPT[373]=0x000000010163b063 P=Y H=N */
 
     if (!pud_present(*pud)) {
-        len += snprintf(buf + len, buflen - len, "└─ WALK STOPPED: PUD not present\n");
+        OUT("STOP:L3\n");
         return len;
     }
-
     if (pud_leaf(*pud)) {
-        unsigned long phys = (pud_val(*pud) & PUD_MASK) | (vaddr & ~PUD_MASK);
-        len += snprintf(buf + len, buflen - len, "└─ 1GB HUGE PAGE! Physical = 0x%lx\n", phys);
+        /*
+         * 1GB HUGE PAGE PATH (not taken in this trace):
+         * Physical = (entry & PUD_MASK) | (vaddr & ~PUD_MASK)
+         * PUD_MASK = ~((1 << 30) - 1) = 0xFFFFFFFFC0000000
+         * Would map 1GB directly without PT/PD lookup.
+         */
+        OUT("1GB@0x%lx\n", (pud_val(*pud) & PUD_MASK) | (vaddr & ~PUD_MASK));
         return len;
     }
-
-    len += snprintf(buf + len, buflen - len, "└─ Points to PD at physical: 0x%lx\n\n",
-                    pud_val(*pud) & PTE_PFN_MASK);
 
     /*
-     * STEP 4: PD (Level 2)
-     * --------------------
-     * Input: PDPT Phys Base (0x1002c1000) + PD_Index (218)
-     * Operation: 0x1002c1000 + (218 * 8) = 0x1002c16D0
-     * Memory Read: 1 cache line.
-     * Output: PMD (Page Middle Directory) Entry.
-     *         pmd_val = 0x128fde067
-     *         Next Base = 0x128fde000
-     * Check: Bit[7] (PS). Here 0x...067 → 0.
-     *        If 1, would be 2MB Huge Page.
-     *        ∴ Not Huge. Continuing to Level 1.
+     * EXTRACT NEXT TABLE ADDRESS:
+     * 0x10163b063 & PTE_PFN_MASK = 0x10163b000
+     * PD table is at physical 0x10163b000
      */
-    pmd = pmd_offset(pud, vaddr);
-    len += snprintf(buf + len, buflen - len,
-                    "STEP 4: PD (Page Directory)\n"
-                    "├─ PD[%lu] raw value = 0x%016lx\n"
-                    "├─ PMD present? = %s\n"
-                    "├─ PMD huge (2MB page)? = %s\n",
-                    pd_idx, pmd_val(*pmd), pmd_present(*pmd) ? "YES" : "NO",
-                    pmd_leaf(*pmd) ? "YES" : "NO");
+    OUT("→PD@0x%lx\n", pud_val(*pud) & PTE_PFN_MASK);
+    /* OUTPUT: →PD@0x10163b000 */
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * STEP 4: PD LOOKUP (Level 2 - Page Directory)
+     * ═══════════════════════════════════════════════════════════════════════
+     * CALL: pmd = pmd_offset(pud, vaddr)
+     * ─────────────────────────────────────────────────────────────────────────
+     * INPUT:
+     *   pud value = 0x10163b063 (from previous step)
+     *   pd_idx = 5
+     *
+     * OPERATION:
+     *   1. Extract PD base from pud entry:
+     *      0x10163b063 & PTE_PFN_MASK = 0x10163b000
+     *
+     *   2. Convert physical to virtual:
+     *      __va(0x10163b000) = 0xFFFF888000000000 + 0x10163b000
+     *      = 0xFFFF88810163b000
+     *
+     *   3. Add index offset:
+     *      pd_idx = 5
+     *      Offset = 5 × 8 = 40 bytes = 0x28
+     *
+     *      pmd = 0xFFFF88810163b000 + 0x28 = 0xFFFF88810163b028
+     *
+     * RAM READ (on *pmd dereference):
+     *   Virtual 0xFFFF88810163b028 → Physical 0x10163b028
+     *   CPU reads 8 bytes from RAM[0x10163b028].
+     *   RAM[0x10163b028] = 0x00000001ad4fd063
+     *
+     * ┌─────────────────────────────────────────────────────────────────────┐
+     * │ PD TABLE (512 entries × 8 bytes = 4096 bytes)                      │
+     * │ Physical Base: 0x10163b000                                          │
+     * │ Virtual Base:  0xFFFF88810163b000                                   │
+     * ├─────────────────────────────────────────────────────────────────────┤
+     * │ [0]   @ +0x000 = ...                                                │
+     * │ [1]   @ +0x008 = ...                                                │
+     * │ [2]   @ +0x010 = ...                                                │
+     * │ [3]   @ +0x018 = ...                                                │
+     * │ [4]   @ +0x020 = ...                                                │
+     * │ [5]   @ +0x028 = 0x00000001ad4fd063  ← WE READ THIS                │
+     * │       Bit[0]=1 (Present), Bit[7]=0 (Not 2MB Huge)                  │
+     * │       Bits[51:12]=0x1ad4fd → PT @0x1ad4fd000                        │
+     * │ ...                                                                 │
+     * │ [511] @ +0xFF8 = ...                                                │
+     * └─────────────────────────────────────────────────────────────────────┘
+     *
+     * FLAG CHECK: Is this a 2MB Huge Page?
+     *   pmd_leaf(*pmd) = 0x1ad4fd063 & 0x80 = 0
+     *   0x63 = 0110 0011. Bit 7 = 0.
+     *   → NOT a 2MB huge page. Continue to Level 1.
+     */
+    pmd = pmd_offset(pud, vaddr); /* pmd = 0xFFFF88810163b028 */
+
+    /*
+     * pmd_val(*pmd) = dereference pmd.
+     * RAM[0x10163b028] = 0x00000001ad4fd063
+     * pmd_present = 0x1ad4fd063 & 1 = 1 = TRUE
+     * pmd_leaf = 0x1ad4fd063 & 0x80 = 0 = FALSE (not 2MB huge)
+     */
+    OUT("L2:PD[%lu]=0x%016lx P=%s H=%s\n", pd_idx, pmd_val(*pmd), YN(pmd_present(*pmd)),
+        YN(pmd_leaf(*pmd)));
+    /* OUTPUT: L2:PD[5]=0x00000001ad4fd063 P=Y H=N */
 
     if (!pmd_present(*pmd)) {
-        len += snprintf(buf + len, buflen - len, "└─ WALK STOPPED: PMD not present\n");
+        OUT("STOP:L2\n");
         return len;
     }
-
     if (pmd_leaf(*pmd)) {
+        /*
+         * 2MB HUGE PAGE PATH (not taken in this trace):
+         * Physical = (entry & PMD_MASK) | (vaddr & ~PMD_MASK)
+         * PMD_MASK = ~((1 << 21) - 1) = 0xFFFFFFFFFFE00000
+         * Would map 2MB directly without PT lookup.
+         */
         unsigned long phys = (pmd_val(*pmd) & PMD_MASK) | (vaddr & ~PMD_MASK);
-        len += snprintf(buf + len, buflen - len, "└─ 2MB HUGE PAGE! Physical = 0x%lx\n\n", phys);
-        len += snprintf(buf + len, buflen - len,
-                        "═══════════════════════════════════════════════════════════════════════\n"
-                        "RESULT: VIRTUAL 0x%lx → PHYSICAL 0x%lx (2MB HUGE PAGE)\n"
-                        "═══════════════════════════════════════════════════════════════════════\n",
-                        vaddr, phys);
+        OUT("2MB@0x%lx\n" DLINE "VA=0x%lx->PA=0x%lx(2MB)\n" DLINE, phys, vaddr, phys);
         return len;
     }
-
-    len += snprintf(buf + len, buflen - len, "└─ Points to PT at physical: 0x%lx\n\n",
-                    pmd_val(*pmd) & PTE_PFN_MASK);
 
     /*
-     * STEP 5: PT (Level 1)
-     * --------------------
-     * Input: PD Phys Base (0x128fde000) + PT_Index (7)
-     * Operation: 0x128fde000 + (7 * 8) = 0x128fde038
-     * Output: PTE (Page Table Entry).
-     *         pte_val = 0x80000001c6b94163
-     *         [63] NX (No Execute) = 1 (Stack is usually non-executable)
-     *         [51:12] PFN = 0x1c6b94
-     *         [6] Dirty = 1 (Written to)
-     *         [5] Accessed = 1 (Read/Written)
-     *         [2] User = 0 (Wait, 0x...163 → 01100011?
-     *            3 = 0011 (P=1, RW=1)
-     *            6 = 0110 (User=0?? No, bit 2. 0x3=0011 means User=0, RW=1.
-     *            Wait, stack usually User=1.
-     *            0x163 = 0001 0110 0011.
-     *            Bit 2 (4) is 0? 0011 & 4 = 0.
-     *            Interpretation: Supervisor only? That's odd for User stack.
-     *            Ah, input was "stack" for Kernel Module -> executed in Kernel Context?
-     *            No, "echo stack" accesses the module's local variable 'stack_var'.
-     *            Module runs in Kernel Mode (Ring 0).
-     *            ∴ Stack variable is on Kernel Stack!
-     *            ∴ User bit = 0 is CORRECT.
-     *            This is a Kernel Stack Address, not User Stack.
-     *            (Verify: 0xffff... is canonical upper half = Kernel Space).
+     * EXTRACT NEXT TABLE ADDRESS:
+     * 0x1ad4fd063 & PTE_PFN_MASK = 0x1ad4fd000
+     * PT table is at physical 0x1ad4fd000
      */
-    pte = pte_offset_kernel(pmd, vaddr);
-    len += snprintf(buf + len, buflen - len,
-                    "STEP 5: PT (Page Table)\n"
-                    "├─ PT[%lu] raw value = 0x%016lx\n"
-                    "├─ PTE present? = %s\n"
-                    "├─ PTE writable? = %s\n"
-                    "├─ PTE user-accessible? = %s\n"
-                    "├─ PTE accessed? = %s\n"
-                    "├─ PTE dirty? = %s\n",
-                    pt_idx, pte_val(*pte), pte_present(*pte) ? "YES" : "NO",
-                    pte_write(*pte) ? "YES" : "NO", pte_val(*pte) & _PAGE_USER ? "YES" : "NO",
-                    pte_young(*pte) ? "YES" : "NO", pte_dirty(*pte) ? "YES" : "NO");
+    OUT("→PT@0x%lx\n", pmd_val(*pmd) & PTE_PFN_MASK);
+    /* OUTPUT: →PT@0x1ad4fd000 */
+
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * STEP 5: PT LOOKUP (Level 1 - Page Table)
+     * ═══════════════════════════════════════════════════════════════════════
+     * CALL: pte = pte_offset_kernel(pmd, vaddr)
+     * ─────────────────────────────────────────────────────────────────────────
+     * INPUT:
+     *   pmd value = 0x1ad4fd063 (from previous step)
+     *   pt_idx = 405
+     *
+     * OPERATION:
+     *   1. Extract PT base from pmd entry:
+     *      0x1ad4fd063 & PTE_PFN_MASK = 0x1ad4fd000
+     *
+     *   2. Convert physical to virtual:
+     *      __va(0x1ad4fd000) = 0xFFFF888000000000 + 0x1ad4fd000
+     *      = 0xFFFF8881ad4fd000
+     *
+     *   3. Add index offset:
+     *      pt_idx = 405
+     *      Offset = 405 × 8 = 3240 bytes
+     *      3240 in hex: 3240 / 16 = 202 rem 8 → 8
+     *                   202 / 16 = 12 rem 10 → A
+     *                   12 / 16 = 0 rem 12 → C
+     *      3240 = 0xCA8
+     *
+     *      pte = 0xFFFF8881ad4fd000 + 0xCA8 = 0xFFFF8881ad4fdCA8
+     *
+     * RAM READ (on *pte dereference):
+     *   Virtual 0xFFFF8881ad4fdCA8 → Physical 0x1ad4fdCA8
+     *   CPU reads 8 bytes from RAM[0x1ad4fdCA8].
+     *   RAM[0x1ad4fdCA8] = 0x8000000100b95163
+     *
+     * ┌─────────────────────────────────────────────────────────────────────┐
+     * │ PT TABLE (512 entries × 8 bytes = 4096 bytes)                      │
+     * │ Physical Base: 0x1ad4fd000                                          │
+     * │ Virtual Base:  0xFFFF8881ad4fd000                                   │
+     * ├─────────────────────────────────────────────────────────────────────┤
+     * │ [0]   @ +0x000 = ...                                                │
+     * │ ...                                                                 │
+     * │ [405] @ +0xCA8 = 0x8000000100b95163  ← WE READ THIS                │
+     * │       FINAL ENTRY - POINTS TO PHYSICAL PAGE                         │
+     * │ ...                                                                 │
+     * │ [511] @ +0xFF8 = ...                                                │
+     * └─────────────────────────────────────────────────────────────────────┘
+     *
+     * PTE FLAGS DECODE: 0x8000000100b95163
+     * ─────────────────────────────────────
+     * Bit layout:
+     *   [63]    NX (No Execute) = 1 (0x8... = 1000...) → Kernel code can't execute here
+     *   [62:52] Reserved = 0
+     *   [51:12] PFN = (0x8000000100b95163 >> 12) & 0xFFFFFFFFF = 0x100b95
+     *   [11:9]  Available for OS
+     *   [8]     Global (G) = 0
+     *   [7]     Page Size (PS) = 0 (4KB page, not huge)
+     *   [6]     Dirty (D) = 1 (0x163 & 0x40 = 0x40 ≠ 0) → Page has been written
+     *   [5]     Accessed (A) = 1 (0x163 & 0x20 = 0x20 ≠ 0) → Page has been read/written
+     *   [4]     PCD (Cache Disable) = 0
+     *   [3]     PWT (Write-Through) = 0
+     *   [2]     U/S (User/Supervisor) = 0 (0x163 & 0x04 = 0) → Supervisor only
+     *   [1]     R/W (Read/Write) = 1 (0x163 & 0x02 = 2 ≠ 0) → Writable
+     *   [0]     Present (P) = 1 (0x163 & 0x01 = 1) → Page is in RAM
+     *
+     * 0x163 = 0001 0110 0011 binary
+     *         ↑    ↑↑   ↑↑
+     *         8    64   21 (bit positions: 8,6,5,1,0)
+     *
+     * WHY U/S = 0 (Supervisor)?
+     *   vaddr = 0xffff8a5d40b95400 starts with 0xFFFF...
+     *   This is KERNEL space (upper half of canonical addresses).
+     *   Kernel addresses are not accessible from user mode.
+     *   ∴ U/S = 0 is CORRECT.
+     */
+    pte = pte_offset_kernel(pmd, vaddr); /* pte = 0xFFFF8881ad4fdCA8 */
+
+    /*
+     * pte_val(*pte) = dereference pte.
+     * RAM[0x1ad4fdCA8] = 0x8000000100b95163
+     *
+     * Flag checks:
+     *   pte_present = 0x163 & 1 = 1 = TRUE
+     *   pte_write = 0x163 & 2 = 2 ≠ 0 = TRUE
+     *   _PAGE_USER = 0x163 & 4 = 0 = FALSE (kernel only)
+     *   pte_young = 0x163 & 0x20 = 0x20 ≠ 0 = TRUE (accessed)
+     *   pte_dirty = 0x163 & 0x40 = 0x40 ≠ 0 = TRUE (dirty)
+     */
+    OUT("L1:PT[%lu]=0x%016lx P=%s W=%s U=%s A=%s D=%s\n", pt_idx, pte_val(*pte),
+        YN(pte_present(*pte)), YN(pte_write(*pte)), YN(pte_val(*pte) & _PAGE_USER),
+        YN(pte_young(*pte)), YN(pte_dirty(*pte)));
+    /* OUTPUT: L1:PT[405]=0x8000000100b95163 P=Y W=Y U=N A=Y D=Y */
 
     if (!pte_present(*pte)) {
-        len += snprintf(buf + len, buflen - len, "└─ WALK STOPPED: PTE not present\n");
+        OUT("STOP:L1\n");
         return len;
     }
 
-    /* Calculate physical address */
-    /* PFN * 4096 + Offset */
-    unsigned long pfn = pte_pfn(*pte);
-    unsigned long phys_addr = (pfn << PAGE_SHIFT) | offset;
+    /*
+     * ═══════════════════════════════════════════════════════════════════════
+     * FINAL CALCULATION: PHYSICAL ADDRESS
+     * ═══════════════════════════════════════════════════════════════════════
+     *
+     * PFN EXTRACTION:
+     *   pte_val = 0x8000000100b95163
+     *   pte_pfn(*pte) = (pte_val >> 12) & 0xFFFFFFFFF
+     *   = (0x8000000100b95163 >> 12)
+     *   = 0x8000000100b95
+     *   & 0xFFFFFFFFF = 0x100b95
+     *   PFN = 0x100b95 = 1051541 in decimal
+     *
+     * PHYSICAL ADDRESS:
+     *   phys_addr = (PFN << PAGE_SHIFT) | offset
+     *   PAGE_SHIFT = 12
+     *   = (0x100b95 << 12) | 0x400
+     *
+     *   0x100b95 << 12:
+     *     0x100b95 × 4096 = 0x100b95000
+     *     (shift left 12 bits = multiply by 2^12 = 4096)
+     *
+     *   0x100b95000 | 0x400 = 0x100b95400
+     *
+     * RESULT:
+     *   Virtual:  0xffff8a5d40b95400
+     *   Physical: 0x0000000100b95400
+     *
+     * ┌─────────────────────────────────────────────────────────────────────┐
+     * │ PHYSICAL PAGE                                                       │
+     * │ Base Address: 0x100b95000                                           │
+     * │ Size: 4096 bytes (0x1000)                                           │
+     * ├─────────────────────────────────────────────────────────────────────┤
+     * │ +0x000 = first byte of page                                         │
+     * │ ...                                                                 │
+     * │ +0x400 = byte 1024 = OUR TARGET  ← vaddr & 0xFFF = 0x400            │
+     * │ ...                                                                 │
+     * │ +0xFFF = byte 4095 = last byte of page                              │
+     * └─────────────────────────────────────────────────────────────────────┘
+     */
+    unsigned long pfn = pte_pfn(*pte);                      /* pfn = 0x100b95 */
+    unsigned long phys_addr = (pfn << PAGE_SHIFT) | offset; /* phys_addr = 0x100b95400 */
 
-    len += snprintf(buf + len, buflen - len,
-                    "├─ Physical Frame Number (PFN) = %lu (0x%lx)\n"
-                    "└─ Physical Page Address = 0x%lx\n\n",
-                    pfn, pfn, pfn << PAGE_SHIFT);
+    OUT("PFN=0x%lx PAGE@0x%lx\n", pfn, pfn << PAGE_SHIFT);
+    /* OUTPUT: PFN=0x100b95 PAGE@0x100b95000 */
 
-    len += snprintf(buf + len, buflen - len,
-                    "═══════════════════════════════════════════════════════════════════════\n"
-                    "FINAL RESULT\n"
-                    "═══════════════════════════════════════════════════════════════════════\n"
-                    "Virtual Address:  0x%016lx\n"
-                    "Physical Address: 0x%016lx\n\n"
-                    "TLB ENTRY FORMAT:\n"
-                    "┌─────────────────────────────────────────────────────────────────────┐\n"
-                    "│ VPN: 0x%012lx  →  PFN: 0x%012lx │\n"
-                    "└─────────────────────────────────────────────────────────────────────┘\n",
-                    vaddr, phys_addr, vaddr >> 12, pfn);
+    OUT(DLINE "VA=0x%016lx → PA=0x%016lx\n" DLINE, vaddr, phys_addr);
+    /* OUTPUT: VA=0xffff8a5d40b95400 → PA=0x0000000100b95400 */
+
+    /*
+     * TLB ENTRY FORMAT:
+     * After this walk, TLB would store:
+     *   VPN = vaddr >> 12 = 0xffff8a5d40b95400 >> 12 = 0xffff8a5d40b95
+     *   PFN = 0x100b95
+     *
+     * Next access to any address in range:
+     *   0xffff8a5d40b95000 to 0xffff8a5d40b95FFF
+     * Would HIT in TLB, skip all 4 RAM reads.
+     */
+    OUT("TLB: VPN=0x%lx → PFN=0x%lx\n", vaddr >> 12, pfn);
+    /* OUTPUT: TLB: VPN=0xffff8a5d40b95 → PFN=0x100b95 */
 
     return len;
 }
@@ -542,7 +1086,27 @@ static ssize_t proc_read(struct file* file, char __user* buf, size_t count, loff
                        "  echo '0x7f0000000000' > /proc/pagewalk\n"
                        "  cat /proc/pagewalk\n\n"
                        "Or test with current stack:\n"
-                       "  echo 'stack' > /proc/pagewalk\n");
+                       "  echo 'stack' > /proc/pagewalk\n\n"
+                       "Or walk current task_struct (stable):\n"
+                       "  echo 'self' > /proc/pagewalk\n");
+    } else if (target_vaddr == 1) {
+        /*
+         * SELF MODE: Walk address of current task_struct.
+         * ================================================
+         * 01. `current` = task_struct of "cat" process.
+         * 02. "cat" is running NOW (during this read).
+         * 03. ∴ task_struct is VALID and STABLE.
+         * 04. No dangling pointer issue.
+         */
+        unsigned long self_addr = (unsigned long)current;
+        printk(KERN_INFO "pagewalk: Walking current task_struct at 0x%lx\n", self_addr);
+        len = walk_page_tables(self_addr, result_buffer, BUF_SIZE);
+    } else if (target_vaddr == 2) {
+        /*
+         * PROOF MODE: Show kernel page table sharing.
+         */
+        len = 0;
+        prove_kernel_sharing(result_buffer, &len, BUF_SIZE);
     } else {
         len = walk_page_tables(target_vaddr, result_buffer, BUF_SIZE);
     }
@@ -612,6 +1176,24 @@ static ssize_t proc_write(struct file* file, const char __user* buf, size_t coun
         int stack_var = 42;
         target_vaddr = (unsigned long)&stack_var;
         printk(KERN_INFO "pagewalk: Using stack address 0x%lx\n", target_vaddr);
+    } else if (strncmp(input, "self", 4) == 0) {
+        /*
+         * SELF MODE: Walk current task_struct during READ.
+         * =================================================
+         * 01. Set target_vaddr = 1 (magic value).
+         * 02. proc_read() detects this magic value.
+         * 03. proc_read() uses (unsigned long)current.
+         * 04. `current` at read time = "cat" process.
+         * 05. ∴ task_struct is VALID (cat is running).
+         */
+        target_vaddr = 1;
+        printk(KERN_INFO "pagewalk: Self mode enabled (will walk cat's task_struct)\n");
+    } else if (strncmp(input, "proof", 5) == 0) {
+        /*
+         * PROOF MODE: Show that kernel page tables are shared.
+         */
+        target_vaddr = 2;
+        printk(KERN_INFO "pagewalk: Proof mode enabled\n");
     } else {
         /* Parse hex address */
         if (kstrtoul(input, 0, &target_vaddr) < 0) {
