@@ -2,63 +2,133 @@
  * DEMO 01: READ CR3 REGISTER
  * ==========================
  *
- * WHAT THIS DRIVER DOES:
- * Reads the CR3 control register and outputs its components to /proc/demo_cr3
+ * ═══════════════════════════════════════════════════════════════════════════
+ * AXIOMATIC DERIVATION - EVERY CLAIM PROVEN FROM FIRST PRINCIPLES
+ * ═══════════════════════════════════════════════════════════════════════════
  *
- * YOUR MACHINE DATA:
- * CPU: AMD Ryzen 5 4600H
- * CR3 observed values: 0x2CCB6C000, 0x12EB28000, 0x1337A3000, 0x10AB4A000
- * All end in 0x000 (4KB aligned, low 12 bits = 0)
+ * AXIOM 1: YOUR CPU HAS 44 PHYSICAL ADDRESS BITS
+ * ──────────────────────────────────────────────
+ * Source: cat /proc/cpuinfo | grep "address sizes"
+ * Output: "address sizes : 44 bits physical, 48 bits virtual"
  *
- * CR3 BIT LAYOUT (64 bits):
- * ┌────────────────┬────────────────────────────────────────┬────────────────┐
- * │ bits [63:52]   │ bits [51:12]                           │ bits [11:0]    │
- * │ 12 bits        │ 40 bits                                │ 12 bits        │
- * │ RESERVED = 0   │ PML4 PHYSICAL ADDRESS                  │ PCID (Intel)   │
- * │                │                                        │ Reserved (AMD) │
- * └────────────────┴────────────────────────────────────────┴────────────────┘
+ * DERIVATION:
+ *   44 bits → max addressable = 2^44 bytes
+ *   2^44 = 2^10 × 2^10 × 2^10 × 2^10 × 2^4
+ *        = 1024 × 1024 × 1024 × 1024 × 16
+ *        = 17,592,186,044,416 bytes
+ *        = 16 TB
+ *   ∴ Your CPU can address up to 16 TB of physical RAM
+ *   ∴ Your 15 GB RAM uses only ~34 bits (log2(16,000,000,000) = 33.9)
  *
- * EXAMPLE WITH YOUR CR3 = 0x1337A3000:
- *   Full value:     0x00000001337A3000
- *   bits [63:52]:   0x000 (reserved, always 0)
- *   bits [51:12]:   0x1337A3 (40-bit field, only 21 bits used = 0x1337A3)
- *   bits [11:0]:    0x000 (PCID on Intel, reserved on AMD)
+ * AXIOM 2: CR3 STORES PHYSICAL ADDRESS IN BITS [51:12]
+ * ────────────────────────────────────────────────────
+ * Source: Intel SDM Volume 3, Chapter 4.5 "CR3"
  *
- *   PML4 physical = 0x1337A3 × 0x1000 = 0x1337A3000
+ * DERIVATION:
+ *   bits [51:12] = 40 bits for address
+ *   bits [11:0]  = 12 bits for PCID (Intel) or reserved (AMD)
+ *   bits [63:52] = 12 bits reserved
  *
- *   CALCULATION:
- *   0x1337A3 = 1,259,427 (decimal)
- *   1,259,427 × 4,096 = 5,158,772,736 = 0x1337A3000 ✓
+ *   Why 40 bits for address?
+ *     40 bits can address 2^40 = 1 TB of 4KB pages
+ *     Each PML4 table is 4KB = 2^12 bytes
+ *     So address stored is (physical / 4096), then shifted left 12
+ *     Effectively stores physical address with last 12 bits = 0 (4KB aligned)
  *
- *   log2(0x1337A3000) = log2(5,158,772,736) = 32.26
- *   → 33 bits needed to represent this address
- *   → Stored as 21 bits (after removing low 12 zeros)
+ * AXIOM 3: CR3 FROM YOUR MACHINE
+ * ─────────────────────────────
+ * Source: cat /proc/pagewalk (from existing kernel module)
+ * Output: CR3=0x00000001337A3000
  *
- * WHY CR3 CHANGES:
- *   Each process has its own PML4 table at different physical address.
- *   Context switch → CPU loads new CR3 → new address space.
+ * DERIVATION:
+ *   0x1337A3000 in binary:
+ *   0001_0011_0011_0111_1010_0011_0000_0000_0000
  *
- *   process_a: CR3 = 0x2CCB6C000
- *   process_b: CR3 = 0x12EB28000
- *   shell:     CR3 = 0x1337A3000
+ *   bit 32: 1 (highest set bit)
+ *   bits [31:0]: 0x337A3000
  *
- *   KERNEL HALF (PML4[256:511]) same in all → shared kernel mappings
- *   USER HALF (PML4[0:255]) different → each process has own user space
+ *   fls64(0x1337A3000) = 33 → 33 bits needed
  *
- * INSTRUCTION USED:
- *   asm volatile("mov %%cr3, %0" : "=r"(cr3));
+ *   Alignment check:
+ *   0x1337A3000 & 0xFFF = 0x000 ✓ (4KB aligned)
  *
- *   mov %%cr3, %0:
- *   - %%cr3: CR3 register (double % for AT&T syntax in inline asm)
- *   - %0: first output operand (the C variable 'cr3')
- *   - "=r": constraint = output (=) to any register (r)
+ * AXIOM 4: PAGE_OFFSET_BASE ON YOUR MACHINE
+ * ─────────────────────────────────────────
+ * Source: sudo cat /proc/kallsyms | grep page_offset_base
+ * Output: ffffffff9695b668 D page_offset_base
+ * Value: 0xFFFF89DF00000000 (read from prove_direct_map.ko)
  *
- *   volatile: don't optimize away, always execute
+ * DERIVATION:
+ *   To read physical 0x1337A3000 in kernel code:
+ *   virtual = page_offset_base + physical
+ *           = 0xFFFF89DF00000000 + 0x1337A3000
  *
- * RING 0 ONLY:
- *   CR3 is privileged. User space (ring 3) cannot read it.
- *   Attempt → #GP (General Protection) fault → SIGSEGV.
- *   Kernel modules run in ring 0 → can read CR3.
+ *   Step by step:
+ *   0xFFFF89DF00000000
+ * +        0x1337A3000
+ *   ─────────────────
+ *   0xFFFF89E0337A3000
+ *
+ *   Verify (hex addition):
+ *   ...DF00000000 + 1337A3000:
+ *   Low 8 hex: 00000000 + 337A3000 = 337A3000
+ *   Next hex:  DF + 1 (carry) = E0
+ *   Result: 0xFFFF89E0337A3000 ✓
+ *
+ * AXIOM 5: WHY MASK IS 0x000FFFFFFFFFF000
+ * ──────────────────────────────────────
+ * Need to extract bits [51:12] from CR3.
+ *
+ * DERIVATION:
+ *   bits [11:0]  = 0 → mask has 0s in positions 0-11
+ *   bits [51:12] = 1 → mask has 1s in positions 12-51
+ *   bits [63:52] = 0 → mask has 0s in positions 52-63
+ *
+ *   bits [51:12] = 40 ones starting at bit 12
+ *   = (2^40 - 1) << 12
+ *   = 0xFFFFFFFFFF << 12
+ *   = 0xFFFFFFFFFF000
+ *
+ *   But we also need to clear bits [63:52]:
+ *   0x000FFFFFFFFFF000
+ *
+ *   Verify: count Fs
+ *   0x000 (3 hex = 12 bits zeros at top)
+ *   FFFFFFFFFF (10 Fs = 40 bits ones)
+ *   000 (3 hex = 12 bits zeros at bottom)
+ *   Total: 12 + 40 + 12 = 64 bits ✓
+ *
+ * AXIOM 6: PML4 TABLE SIZE = 4096 BYTES
+ * ────────────────────────────────────
+ * Source: Intel SDM Volume 3, Chapter 4.5
+ *
+ * DERIVATION:
+ *   PML4 has 512 entries (x86_64 specification)
+ *   Each entry is 8 bytes (64 bits)
+ *   512 × 8 = 4096 bytes = 4 KB = 1 page
+ *
+ *   Why 512?
+ *   9 bits of virtual address select PML4 entry
+ *   2^9 = 512 ✓
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * OBSERVED CR3 VALUES FROM YOUR MACHINE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * process_a:     CR3 = 0x2CCB6C000   (PID varies)
+ * process_b:     CR3 = 0x12EB28000   (PID varies)
+ * shell:         CR3 = 0x1337A3000   (bash)
+ * pagewalk_proc: CR3 = 0x10AB4A000   (cat reading /proc)
+ *
+ * OBSERVATION: All end in 0x000 (low 12 bits = 0)
+ * REASON: 4KB alignment requirement for PML4 table
+ *
+ * OBSERVATION: Different processes have different CR3
+ * REASON: Each process has its own PML4 table
+ *
+ * OBSERVATION: Range 0x10AB4A000 to 0x2CCB6C000 (~4.6 GB spread)
+ * REASON: PML4 tables allocated from Normal zone (4GB+) of RAM
+ *
  */
 
 #include <linux/module.h>
