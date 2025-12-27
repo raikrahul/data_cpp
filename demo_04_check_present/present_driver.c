@@ -1,76 +1,60 @@
 /*
- * DEMO 04: CHECK PRESENT BIT
- * ══════════════════════════
+ * ═══════════════════════════════════════════════════════════════════════════
+ * DEMO 04: CHECK PRESENT BIT AND FLAGS
+ * Machine: AMD Ryzen 5 4600H | Kernel 6.14.0-37-generic
+ * ═══════════════════════════════════════════════════════════════════════════
  *
- * AXIOMATIC DIAGNOSIS (7 Ws)
- * ──────────────────────────
+ * PAGE TABLE ENTRY FLAG LAYOUT (64 bits):
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ Bit  │ Name │ Meaning                                                 │
+ * ├──────┼──────┼─────────────────────────────────────────────────────────┤
+ * │ 0    │ P    │ Present (1=mapped, 0=not present/swapped)               │
+ * │ 1    │ R/W  │ Read/Write (0=read-only, 1=writable)                    │
+ * │ 2    │ U/S  │ User/Supervisor (0=kernel only, 1=user accessible)      │
+ * │ 3    │ PWT  │ Page Write-Through (cache policy)                       │
+ * │ 4    │ PCD  │ Page Cache Disable                                      │
+ * │ 5    │ A    │ Accessed (set by CPU on read)                           │
+ * │ 6    │ D    │ Dirty (set by CPU on write)                             │
+ * │ 7    │ PS   │ Page Size (0=table pointer, 1=huge page)                │
+ * │ 63   │ NX   │ No Execute (1=data only, 0=can execute)                 │
+ * └────────────────────────────────────────────────────────────────────────┘
  *
- * 1. WHAT:
- *    Input:  Entry = 0x80000002FAE00067
- *    Action: Check Bit 0 (LSB)
- *    Output: 1 (Present) or 0 (Not Present)
+ * WORKED EXAMPLE: Entry = 0x80000002FAE00067
+ * ─────────────────────────────────────────────────────────────────────────
+ * Low byte extraction: 0x80000002FAE00067 & 0xFF = 0x67
+ * 0x67 = 103 decimal = 0110_0111 binary
  *
- *    Calculation:
- *    0x80000002FAE00067 (hex)
- *    Bin: 1000...0010_1111_1010_1110_0000_0000_0000_0110_0111
- *                                                       ^
- *                                                       LSB is 1
- *    0x67 = 0110_0111
- *    0x67 & 0x01 = 0x01 (True)
+ * Bit-by-bit decode:
+ * 01. P   = 0x67 & 0x01 = 0x01 = 1 → Present ✓
+ * 02. R/W = (0x67 >> 1) & 1 = (51) & 1 = 1 → Writable ✓
+ *     Work: 0x67 = 103, 103 >> 1 = 51, 51 & 1 = 1
+ * 03. U/S = (0x67 >> 2) & 1 = (25) & 1 = 1 → User accessible ✓
+ *     Work: 103 >> 2 = 25, 25 & 1 = 1
+ * 04. PWT = (0x67 >> 3) & 1 = (12) & 1 = 0 → Write-back
+ * 05. PCD = (0x67 >> 4) & 1 = (6) & 1 = 0 → Cached
+ * 06. A   = (0x67 >> 5) & 1 = (3) & 1 = 1 → Accessed ✓
+ * 07. D   = (0x67 >> 6) & 1 = (1) & 1 = 1 → Dirty ✓
+ * 08. PS  = (0x67 >> 7) & 1 = (0) & 1 = 0 → Not huge page
+ * 09. NX  = (Entry >> 63) & 1 = 1 → No Execute ✓
+ *     Work: 0x8... has bit 63 set (0x8 = 1000 binary)
  *
- * 2. WHY:
- *    - RAM is limited (16GB). Virtual Space is huge (256TB).
- *    - Not all Virtual pages can be in Physical RAM.
- *    - We need a marker: "Is this page in RAM right now?"
- *    - Bit 0 = 0 → Page is on Disk (Swap) or Invalid.
- *    - Bit 0 = 1 → Page is in RAM.
+ * Physical address extraction:
+ * 10. phys = Entry & 0x000FFFFFFFFFF000 = 0x00000002FAE00000
+ * ─────────────────────────────────────────────────────────────────────────
  *
- * 3. WHERE:
- *    - Bit 0 of the 64-bit Page Table Entry.
- *    - Located at physical address derived in Demo 03.
- *
- * 4. WHO:
- *    - MMU (Hardware): Checks this bit *before* reading any other bit.
- *    - If 0, MMU raises Exception #14 (Page Fault).
- *    - If 1, MMU proceeds to check R/W, U/S, etc.
- *
- * 5. WHEN:
- *    - Every single memory access (read or write).
- *    - Example: `MOV RAX, [0xADDR]` triggers check.
- *
- * 6. WITHOUT:
- *    - If Bit 0 didn't exist:
- *    - CPU would assume address 0x0 is valid.
- *    - Or CPU would assume invalid address points to random RAM.
- *    - Result: Corruption or Security Hole.
- *
- * 7. WHICH:
- *    - Bit 0 only.
- *    - Bits 1-63 are ignored by MMU if Bit 0 is 0 (mostly).
- *    - (OS uses bits 1-63 for swap location if P=0).
- *
- * ════════════════════════════════
- * DISTINCT NUMERICAL PUZZLE
- * ════════════════════════════════
- * Scenario: Office Building Directions
- * - Directory lists 512 Employee Names.
- * - Next to name: Room Number (Address).
- * - BUT: Employee might be "Out of Office".
- *
- * Input:
- * - Entry: "Smith | Room 302 | Present: No"
- *
- * Action:
- * - Visitor checks "Present" column FIRST.
- * - If "No", ignores "Room 302" (might be stale).
- * - Goes to Reception (Page Fault Handler).
- *
- * Numerical Analogy:
- * - Entry = 3020 (decimal)
- * - If even (ends in 0) -> Out.
- * - If odd (ends in 1) -> In.
- * - 3020 / 2 = 1510 remainder 0 -> Out.
- * - 3021 / 2 = 1510 remainder 1 -> In.
+ * WHEN P=0 (NOT PRESENT):
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ Entry = 0 means: Never mapped, completely empty                       │
+ * │ Entry ≠ 0 but P=0: Likely a swap entry                                │
+ * │                                                                        │
+ * │ Swap entry format (Linux x86_64):                                     │
+ * │ Bit 0: Always 0 (not present)                                         │
+ * │ Bits [1:5]: Swap type (0-31, index into swap devices)                 │
+ * │ Bits [6:63]: Swap offset                                              │
+ * │                                                                        │
+ * │ TRAP: Checking R/W, A, D when P=0 is MEANINGLESS!                     │
+ * │       These bits contain swap metadata, not flags.                    │
+ * └────────────────────────────────────────────────────────────────────────┘
  */
 
 #include <linux/module.h>
@@ -79,64 +63,88 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("r");
-MODULE_DESCRIPTION("Demo 04: Check Present Bit");
+MODULE_DESCRIPTION("Demo 04: Check Present Bit and Flags");
 
 #define PTE_ADDR_MASK 0x000FFFFFFFFFF000UL
 
-static int is_present(unsigned long entry) {
-    /* entry & 1 = extract bit 0 */
-    return (entry & 1) ? 1 : 0;
-}
+/*
+ * decode_entry: Extract and display all flags from a PTE
+ *
+ * For entry = 0x80000002FAE00067:
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ Register state during decoding:                                       │
+ * │ RAX = 0x80000002FAE00067 (entry)                                      │
+ * │ After AND 0xFF: RAX = 0x67 (flags byte)                               │
+ * │ After SHR 1: RAX = 0x33 = 51                                          │
+ * │ After AND 1: RAX = 1 (R/W bit)                                        │
+ * └────────────────────────────────────────────────────────────────────────┘
+ */
+static void decode_entry(struct seq_file* m, unsigned long entry) {
+    unsigned long flags = entry & 0xFFF;
+    unsigned long phys = entry & PTE_ADDR_MASK;
 
-static void decode_flags(struct seq_file* m, unsigned long entry) {
-    seq_printf(m, "  bit 0 (P):   %lu → %s\n", entry & 1, (entry & 1) ? "Present" : "Not Present");
-    seq_printf(m, "  bit 1 (RW):  %lu → %s\n", (entry >> 1) & 1,
-               ((entry >> 1) & 1) ? "Writable" : "Read-only");
-    seq_printf(m, "  bit 2 (US):  %lu → %s\n", (entry >> 2) & 1,
-               ((entry >> 2) & 1) ? "User" : "Kernel");
-    seq_printf(m, "  bit 5 (A):   %lu → %s\n", (entry >> 5) & 1,
-               ((entry >> 5) & 1) ? "Accessed" : "Not accessed");
-    seq_printf(m, "  bit 6 (D):   %lu → %s\n", (entry >> 6) & 1,
-               ((entry >> 6) & 1) ? "Dirty" : "Clean");
-    seq_printf(m, "  bit 7 (PS):  %lu → %s\n", (entry >> 7) & 1,
-               ((entry >> 7) & 1) ? "Huge Page" : "Table");
-    seq_printf(m, "  bit 63 (NX): %lu → %s\n", (entry >> 63) & 1,
-               ((entry >> 63) & 1) ? "No Execute" : "Executable");
+    seq_printf(m, "  Entry = 0x%016lx\n", entry);
+    seq_printf(m, "  Flags = 0x%03lx (low 12 bits)\n", flags);
+
+    /*
+     * Present bit check - MUST BE FIRST
+     * If P=0, all other bits are undefined/swap metadata
+     */
+    if (!(entry & 1)) {
+        seq_printf(m, "  P = 0 → NOT PRESENT\n");
+        if (entry == 0) {
+            seq_printf(m, "    → Never mapped (all zeros)\n");
+        } else {
+            seq_printf(m, "    → Swap entry: type=%lu, offset=0x%lx\n", (entry >> 1) & 0x1F,
+                       entry >> 6);
+        }
+        return;
+    }
+
+    /*
+     * Decode flags when P=1
+     */
+    seq_printf(m, "  P   = 1 (Present)\n");
+    seq_printf(m, "  R/W = %lu (%s)\n", (entry >> 1) & 1, (entry & 2) ? "Writable" : "Read-only");
+    seq_printf(m, "  U/S = %lu (%s)\n", (entry >> 2) & 1, (entry & 4) ? "User" : "Kernel");
+    seq_printf(m, "  A   = %lu (%s)\n", (entry >> 5) & 1,
+               (entry & 0x20) ? "Accessed" : "Not accessed");
+    seq_printf(m, "  D   = %lu (%s)\n", (entry >> 6) & 1, (entry & 0x40) ? "Dirty" : "Clean");
+    seq_printf(m, "  PS  = %lu (%s)\n", (entry >> 7) & 1,
+               (entry & 0x80) ? "Huge page" : "Table ptr");
+    seq_printf(m, "  NX  = %lu (%s)\n", (entry >> 63) & 1,
+               (entry >> 63) ? "No execute" : "Executable");
+    seq_printf(m, "  Phys = 0x%lx\n", phys);
 }
 
 static int demo_present_show(struct seq_file* m, void* v) {
     unsigned long cr3, pml4_phys;
-    unsigned long* pml4_virt;
-    unsigned long entry;
+    unsigned long* pml4;
+    int indices[] = {0, 255, 256, 511};
     int i;
-    int present_count = 0;
 
     asm volatile("mov %%cr3, %0" : "=r"(cr3));
     pml4_phys = cr3 & PTE_ADDR_MASK;
-    pml4_virt = (unsigned long*)__va(pml4_phys);
+    pml4 = (unsigned long*)__va(pml4_phys);
 
     seq_printf(m, "═══════════════════════════════════════════════════════════\n");
-    seq_printf(m, "DEMO 04: CHECK PRESENT BIT\n");
+    seq_printf(m, "DEMO 04: PRESENT BIT AND FLAGS\n");
     seq_printf(m, "═══════════════════════════════════════════════════════════\n\n");
 
-    seq_printf(m, "FORMULA: is_present = entry & 1\n\n");
+    seq_printf(m, "FLAG EXTRACTION FORMULA:\n");
+    seq_printf(m, "  P   = (entry >> 0) & 1    ; bit 0\n");
+    seq_printf(m, "  R/W = (entry >> 1) & 1    ; bit 1\n");
+    seq_printf(m, "  U/S = (entry >> 2) & 1    ; bit 2\n");
+    seq_printf(m, "  A   = (entry >> 5) & 1    ; bit 5\n");
+    seq_printf(m, "  D   = (entry >> 6) & 1    ; bit 6\n");
+    seq_printf(m, "  PS  = (entry >> 7) & 1    ; bit 7\n");
+    seq_printf(m, "  NX  = (entry >> 63) & 1   ; bit 63\n\n");
 
-    /* Count present entries */
-    for (i = 0; i < 512; i++) {
-        if (pml4_virt[i] & 1) present_count++;
-    }
-    seq_printf(m, "PML4 entries present: %d / 512\n\n", present_count);
-
-    /* Show user space entries */
-    seq_printf(m, "USER SPACE (0-255):\n");
-    seq_printf(m, "────────────────────────────────────────────────────────\n");
-    for (i = 0; i < 256; i++) {
-        entry = pml4_virt[i];
-        if (entry & 1) {
-            seq_printf(m, "PML4[%d] = 0x%016lx\n", i, entry);
-            decode_flags(m, entry);
-            seq_printf(m, "\n");
-        }
+    for (i = 0; i < 4; i++) {
+        unsigned long entry = pml4[indices[i]];
+        seq_printf(m, "PML4[%d]:\n", indices[i]);
+        decode_entry(m, entry);
+        seq_printf(m, "\n");
     }
 
     return 0;

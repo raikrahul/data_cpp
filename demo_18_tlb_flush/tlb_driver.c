@@ -1,71 +1,72 @@
 /*
+ * ═══════════════════════════════════════════════════════════════════════════
  * DEMO 18: TLB FLUSH
- * ══════════════════
+ * Machine: AMD Ryzen 5 4600H | 12 logical CPUs
+ * ═══════════════════════════════════════════════════════════════════════════
  *
- * AXIOMATIC DIAGNOSIS (7 Ws)
- * ──────────────────────────
+ * TLB (Translation Lookaside Buffer):
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ Purpose: Cache virtual-to-physical translations                       │
+ * │                                                                        │
+ * │ Without TLB:                                                           │
+ * │   Every memory access → 4 table reads (PML4→PDPT→PD→PT)               │
+ * │   Each read = ~100 ns (RAM latency)                                   │
+ * │   Total = 400 ns per translation + 100 ns data = 500 ns               │
+ * │                                                                        │
+ * │ With TLB hit:                                                          │
+ * │   VA → TLB lookup (~1 cycle = ~0.25 ns) → PA                          │
+ * │   Total = ~1 ns translation + access                                  │
+ * │   Speedup: 500× for translation, ~5× overall with cache               │
+ * └────────────────────────────────────────────────────────────────────────┘
  *
- * 1. WHAT:
- *    Input: Current Page Tables.
- *    Action: Invalidate CPU Cache of Translations.
- *    Output: Empty TLB (Misses guaranteed next time).
+ * TLB SIZES (typical AMD Zen2):
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ L1 dTLB: 64 entries × 4KB = 256 KB coverage                           │
+ * │ L1 dTLB: 32 entries × 2MB = 64 MB coverage                            │
+ * │ L1 iTLB: 64 entries × 4KB = 256 KB coverage                           │
+ * │ L2 TLB:  1536 entries unified                                         │
+ * │                                                                        │
+ * │ Calculation:                                                           │
+ * │ 4KB: 64 × 4096 = 262,144 = 256 KB                                    │
+ * │ 2MB: 32 × 2,097,152 = 67,108,864 = 64 MB                             │
+ * │ L2:  1536 × 4096 = 6,291,456 = 6 MB                                  │
+ * └────────────────────────────────────────────────────────────────────────┘
  *
- *    Computation:
- *    Write CR3 (Reload) -> Flushes all Non-Global entries.
- *    `invlpg` -> Flushes 1 specific entry.
+ * FLUSH TRIGGERS:
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ 1. MOV CR3, value  → Full flush (except G=1 global pages)             │
+ * │ 2. invlpg [addr]   → Single page flush                                │
+ * │ 3. Context switch  → Full flush or PCID switch                        │
+ * │ 4. munmap/mprotect → Range flush via invlpg                           │
+ * │ 5. MOV CR4, value  → Full flush including globals (if modifying PGE) │
+ * └────────────────────────────────────────────────────────────────────────┘
  *
- * 2. WHY:
- *    - Coherency.
- *    - OS changes a Page Table Entry (e.g., marks page Read-Only).
- *    - CPU doesn't know. CPU still has "Read-Write" cached in TLB.
- *    - User writes to page -> Security Violation!
- *    - Solution: Flush TLB to force CPU to re-read PTE.
+ * INVLPG INSTRUCTION:
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ Syntax: invlpg [memory_address]                                       │
+ * │ Opcode: 0F 01 /7                                                      │
+ * │ Privilege: Ring 0 only                                                │
+ * │ Effect: Invalidate TLB entry for the specified address                │
+ * │ Scope: Current CPU ONLY! Other CPUs unaffected.                       │
+ * │                                                                        │
+ * │ For SMP: Need IPI (Inter-Processor Interrupt) to other CPUs            │
+ * │ Kernel: flush_tlb_mm_range() sends IPIs automatically                 │
+ * └────────────────────────────────────────────────────────────────────────┘
  *
- * 3. WHERE:
- *    - L1 TLB (Instructions/Data) inside Core.
- *    - L2 TLB (Shared) inside Core.
- *
- * 4. WHO:
- *    - Kernel Memory Management (mprotect, munmap).
- *    - Context Switcher.
- *
- * 5. WHEN:
- *    - Changing mappings.
- *    - Freeing memory.
- *    - Switching processes (Automatic CR3 write).
- *
- * 6. WITHOUT:
- *    - Stale Translations.
- *    - Use-After-Free vulnerabilities (Accessing freed RAM).
- *    - Correctness failure (COW doesn't trigger).
- *
- * 7. WHICH:
- *    - Global Pages (Kernel) are preserved (Bit 8 in PTE).
- *    - User Pages are flushed.
- *
- * ════════════════════════════════
- * DISTINCT NUMERICAL PUZZLE
- * ════════════════════════════════
- * Scenario: Pizza Delivery Speed Dial
- * - You order Pizza every Friday.
- * - You save "Pizza Place" in Speed Dial (TLB).
- * - Number: 555-0100.
- *
- * Event:
- * - Pizza Place moves. New Number: 555-0200.
- * - They update the Phone Book (Page Table).
- *
- * Failure:
- * - You hit Speed Dial. Call 555-0100.
- * - "Number Disconnected".
- *
- * Solution (Flush):
- * - Delete Speed Dial entry.
- * - Look up in Phone Book again.
- * - Save 555-0200.
+ * IPI OVERHEAD CALCULATION:
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ IPI latency: 1-10 μs per CPU                                          │
+ * │ 12 CPU shootdown: ~10 μs (parallel send, wait for all ACKs)           │
+ * │ Compare to invlpg alone: ~25 ns                                       │
+ * │ Overhead: 10,000 ns / 25 ns = 400×                                    │
+ * │                                                                        │
+ * │ Optimization: Batch shootdowns                                         │
+ * │ - Unmap 1000 pages with 1 shootdown (flush range) instead of 1000    │
+ * │ - Each invlpg on remote: 100 cycles × 1000 = 100,000 cycles          │
+ * │ - Range flush + 1 IPI: much cheaper                                   │
+ * └────────────────────────────────────────────────────────────────────────┘
  */
 
-#include <asm/tlbflush.h>
 #include <linux/module.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
@@ -74,54 +75,105 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("r");
 MODULE_DESCRIPTION("Demo 18: TLB Flush");
 
+#define PTE_ADDR_MASK 0x000FFFFFFFFFF000UL
+
+/*
+ * local_flush_tlb: Flush entire TLB on current CPU by rewriting CR3
+ *
+ * Machine code:
+ *   mov rax, cr3     ; 0F 20 D8 (3 bytes)
+ *   mov cr3, rax     ; 0F 22 D8 (3 bytes)
+ *
+ * Effect:
+ * - All non-global TLB entries invalidated
+ * - Global entries (G=1) preserved (for kernel mappings)
+ * - Must execute on each CPU needing flush
+ */
+static void local_flush_tlb(void) {
+    unsigned long cr3;
+    asm volatile("mov %%cr3, %0" : "=r"(cr3));
+    asm volatile("mov %0, %%cr3" : : "r"(cr3) : "memory");
+}
+
+/*
+ * local_invlpg: Invalidate single TLB entry for given address
+ *
+ * Machine code: invlpg [rax]  ; 0F 01 38 (3 bytes with mod/rm)
+ *
+ * Effect:
+ * - Only the TLB entry for this specific page invalidated
+ * - Cheaper than full flush for single page modifications
+ */
+static void local_invlpg(unsigned long addr) {
+    asm volatile("invlpg (%0)" : : "r"(addr) : "memory");
+}
+
 static int demo_tlb_show(struct seq_file* m, void* v) {
-    unsigned long cr3_before, cr3_after;
+    unsigned long cr3;
+    unsigned long test_addr = (unsigned long)m; /* Some kernel address */
+
+    asm volatile("mov %%cr3, %0" : "=r"(cr3));
 
     seq_printf(m, "═══════════════════════════════════════════════════════════\n");
-    seq_printf(m, "DEMO 18: TLB (Translation Lookaside Buffer)\n");
+    seq_printf(m, "DEMO 18: TLB FLUSH\n");
     seq_printf(m, "═══════════════════════════════════════════════════════════\n\n");
 
-    seq_printf(m, "TLB PURPOSE:\n");
+    seq_printf(m, "TLB COST ANALYSIS:\n");
     seq_printf(m, "────────────────────────────────────────────────────────\n");
-    seq_printf(m, "  Without TLB: VA→PA needs 4 RAM reads (page walk)\n");
-    seq_printf(m, "  With TLB:    VA→PA needs 0 RAM reads (if cached)\n");
-    seq_printf(m, "  Speedup:     ~100x for cached translations\n\n");
+    seq_printf(m, "Without TLB (cold miss):\n");
+    seq_printf(m, "  PML4 read: 100 ns\n");
+    seq_printf(m, "  PDPT read: 100 ns\n");
+    seq_printf(m, "  PD   read: 100 ns\n");
+    seq_printf(m, "  PT   read: 100 ns\n");
+    seq_printf(m, "  ─────────────────\n");
+    seq_printf(m, "  Translation: 400 ns\n");
+    seq_printf(m, "  + Data read: 100 ns\n");
+    seq_printf(m, "  Total: 500 ns\n\n");
 
-    seq_printf(m, "YOUR CPU TLB (AMD Ryzen 5 4600H):\n");
+    seq_printf(m, "With TLB hit:\n");
+    seq_printf(m, "  TLB lookup: ~1 ns\n");
+    seq_printf(m, "  + Data read: ~1-100 ns (L1=1, RAM=100)\n");
+    seq_printf(m, "  Total: 2-101 ns\n\n");
+
+    seq_printf(m, "Speedup: 500 / 2 = 250× (with L1 cache)\n");
+    seq_printf(m, "         500 / 101 = 5× (RAM access)\n\n");
+
+    seq_printf(m, "TLB COVERAGE:\n");
     seq_printf(m, "────────────────────────────────────────────────────────\n");
-    seq_printf(m, "  L1 Data TLB:  64 entries (4KB pages)\n");
-    seq_printf(m, "  L1 Instr TLB: 64 entries (4KB pages)\n");
-    seq_printf(m, "  L2 TLB:       2048 entries (4KB/2MB)\n");
-    seq_printf(m, "  L1 miss + L2 hit: ~7 cycles\n");
-    seq_printf(m, "  L2 miss: full page walk ~100+ cycles\n\n");
+    seq_printf(m, "L1 dTLB 4KB: 64 entries × 4096 = 262,144 = 256 KB\n");
+    seq_printf(m, "L1 dTLB 2MB: 32 entries × 2 MB = 64 MB\n");
+    seq_printf(m, "L2 TLB:      1536 entries × 4 KB = 6 MB\n\n");
 
-    /* Read CR3 */
-    asm volatile("mov %%cr3, %0" : "=r"(cr3_before));
-
-    /* Demonstrate TLB flush (write same CR3 back) */
-    seq_printf(m, "TLB FLUSH DEMONSTRATION:\n");
+    seq_printf(m, "FLUSH DEMONSTRATION:\n");
     seq_printf(m, "────────────────────────────────────────────────────────\n");
-    seq_printf(m, "  CR3 before: 0x%lx\n", cr3_before);
+    seq_printf(m, "1. Full TLB flush (MOV CR3, CR3):\n");
+    seq_printf(m, "   Before: CR3 = 0x%lx\n", cr3);
 
-    /* Writing CR3 flushes non-global TLB entries */
-    asm volatile("mov %%cr3, %%rax; mov %%rax, %%cr3" ::: "rax");
+    local_flush_tlb();
 
-    asm volatile("mov %%cr3, %0" : "=r"(cr3_after));
-    seq_printf(m, "  CR3 after:  0x%lx\n", cr3_after);
-    seq_printf(m, "  TLB flushed (non-global entries invalidated)\n\n");
+    seq_printf(m, "   After:  CR3 = 0x%lx (same, but TLB flushed)\n\n", cr3);
 
-    seq_printf(m, "WHEN TLB IS FLUSHED:\n");
+    seq_printf(m, "2. Single page flush (INVLPG):\n");
+    seq_printf(m, "   Address: 0x%lx\n", test_addr);
+
+    local_invlpg(test_addr);
+
+    seq_printf(m, "   Executed: invlpg (0x%lx)\n", test_addr);
+    seq_printf(m, "   Effect: TLB entry for this page invalidated\n\n");
+
+    seq_printf(m, "IPI SHOOTDOWN (SMP):\n");
     seq_printf(m, "────────────────────────────────────────────────────────\n");
-    seq_printf(m, "  Context switch:  automatic (CR3 changes)\n");
-    seq_printf(m, "  munmap:          kernel calls flush_tlb_range()\n");
-    seq_printf(m, "  mprotect:        kernel calls flush_tlb_range()\n");
-    seq_printf(m, "  PTE modified:    explicit invlpg or CR3 reload\n\n");
+    seq_printf(m, "Problem: invlpg only affects CURRENT CPU\n");
+    seq_printf(m, "Solution: Send IPI to all CPUs running this mm\n");
+    seq_printf(m, "Cost: ~10 μs for 12-CPU shootdown\n");
+    seq_printf(m, "vs invlpg alone: ~25 ns (400× cheaper)\n\n");
 
-    seq_printf(m, "GLOBAL vs NON-GLOBAL:\n");
+    seq_printf(m, "PCID OPTIMIZATION:\n");
     seq_printf(m, "────────────────────────────────────────────────────────\n");
-    seq_printf(m, "  PTE bit 8 = Global\n");
-    seq_printf(m, "  Global entries: kept across CR3 reload (kernel)\n");
-    seq_printf(m, "  Non-global: flushed on CR3 reload (user pages)\n");
+    seq_printf(m, "Without PCID: Context switch → full TLB flush\n");
+    seq_printf(m, "With PCID: Context switch → no flush, entries tagged\n");
+    seq_printf(m, "           Returning process finds TLB warm\n");
+    seq_printf(m, "CR3[11:0] = PCID (12 bits = 4096 contexts)\n");
 
     return 0;
 }

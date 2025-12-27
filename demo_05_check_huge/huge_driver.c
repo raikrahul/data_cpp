@@ -1,77 +1,72 @@
 /*
+ * ═══════════════════════════════════════════════════════════════════════════
  * DEMO 05: CHECK HUGE PAGE BIT
- * ════════════════════════════
+ * Machine: AMD Ryzen 5 4600H | pdpe1gb flag ✓ (1GB pages supported)
+ * ═══════════════════════════════════════════════════════════════════════════
  *
- * AXIOMATIC DIAGNOSIS (7 Ws)
- * ──────────────────────────
+ * PS BIT (Page Size) - BIT 7 OF PAGE TABLE ENTRY
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ At L4 (PML4): Reserved, must be 0                                     │
+ * │ At L3 (PDPT): If 1, entry maps a 1GB page (not table)                 │
+ * │ At L2 (PD):   If 1, entry maps a 2MB page (not table)                 │
+ * │ At L1 (PT):   Reserved/PAT bit, not page size indicator               │
+ * └────────────────────────────────────────────────────────────────────────┘
  *
- * 1. WHAT:
- *    Input: L2 (PD) Entry or L3 (PDPT) Entry
- *    Action: Check Bit 7 (PS - Page Size)
- *    Output: 0 = Table Pointer, 1 = Huge Page
+ * ENTRY = 0x80000002FAE001A1 ANALYSIS:
+ * 01. Low byte: 0xA1 = 1010_0001 binary
+ * 02. Bit 7 = (0xA1 >> 7) & 1 = (161 >> 7) & 1 = 1 & 1 = 1
+ * 03. ∴ PS = 1 → This is a huge page entry (if at L2 or L3)
  *
- *    Computation:
- *    Entry = 0x80000002FAE001A1
- *    Bit 7 = (Entry >> 7) & 1
- *    0x1A1 in binary: ...0001_1010_0001
- *    Right Shift 7:   ...0000_0000_0011 (0x3)
- *    Limit to LSBit:  0x3 & 1 = 1
- *    ∴ Bit 7 is 1.
+ * PS EXTRACTION FORMULA:
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ ps = (entry >> 7) & 1                                                 │
+ * │                                                                        │
+ * │ Example: entry = 0x1A1                                                │
+ * │ 0x1A1 = 417 decimal = 0b110100001                                     │
+ * │                              ↑                                         │
+ * │                              bit 7                                     │
+ * │ 417 >> 7 = 417 / 128 = 3 (integer division)                           │
+ * │ 3 & 1 = 1                                                              │
+ * │ ∴ PS = 1 ✓                                                            │
+ * └────────────────────────────────────────────────────────────────────────┘
  *
- * 2. WHY:
- *    - To map 2MB or 1GB with fewer tables.
- *    - Standard 4KB: PML4 → PDPT → PD → PT → Page (4 levels)
- *    - Huge 2MB:     PML4 → PDPT → PD → Page (3 levels)
- *    - Huge 1GB:     PML4 → PDPT → Page (2 levels)
- *    - Saves RAM (fewer PTs). Saves TLB entries (coverage).
+ * ADDRESS MASKS BY PAGE SIZE:
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ 4KB:  0x000FFFFFFFFFF000  (bits [51:12], 40 bits, offset = 12 bits)   │
+ * │ 2MB:  0x000FFFFFFFE00000  (bits [51:21], 31 bits, offset = 21 bits)   │
+ * │ 1GB:  0x000FFFFFC0000000  (bits [51:30], 22 bits, offset = 30 bits)   │
+ * └────────────────────────────────────────────────────────────────────────┘
  *
- * 3. WHERE:
- *    - Bit 7 of the Entry.
- *    - ONLY valid at PDPT (L3) and PD (L2) levels.
- *    - Ignored/Reserved at PML4 (L4) and PT (L1).
+ * WALK SHORTCUT DIAGRAM:
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ 4KB Walk: CR3 → PML4 → PDPT → PD → PT → 4KB Page                     │
+ * │           (4 table reads + 1 page access = 5 dereferences)            │
+ * │                                                                        │
+ * │ 2MB Walk: CR3 → PML4 → PDPT → PD(PS=1) → 2MB Page                    │
+ * │           (3 table reads + 1 page access = 4 dereferences)            │
+ * │           SAVE: 1 table read (~100ns RAM latency)                     │
+ * │                                                                        │
+ * │ 1GB Walk: CR3 → PML4 → PDPT(PS=1) → 1GB Page                         │
+ * │           (2 table reads + 1 page access = 3 dereferences)            │
+ * │           SAVE: 2 table reads (~200ns)                                │
+ * └────────────────────────────────────────────────────────────────────────┘
  *
- * 4. WHO:
- *    - MMU (Hardware).
- *    - If Bit 7=1 at PD level:
- *      MMU stops walking. Uses Entry[51:21] as Base Address.
- *      Uses VA[20:0] as Offset.
- *
- * 5. WHEN:
- *    - During page walk.
- *    - At Step 2 (PDPT) or Step 3 (PD).
- *
- * 6. WITHOUT:
- *    - Must use 4KB pages for everything.
- *    - 1TB RAM would need 2GB just for Page Tables.
- *    - TLB thrashing on large datasets (DBs, VMs).
- *
- * 7. WHICH:
- *    - 2MB Page: PS=1 in PD. Offset = 21 bits (2MB).
- *    - 1GB Page: PS=1 in PDPT. Offset = 30 bits (1GB).
- *
- * ════════════════════════════════
- * DISTINCT NUMERICAL PUZZLE
- * ════════════════════════════════
- * Scenario: City Zoning
- * - Standard Zone: 4km x 4km blocks.
- * - Industrial Zone: 1 huge 100km x 100km block.
- *
- * Map Legend (bit 7):
- * - 0 = "See detailed sub-map for this sector"
- * - 1 = "This entire sector is one factory"
- *
- * Numerical Analogy:
- * - Address = 12345
- * - If Map[1] says "Standard":
- *   - Look up Map[12][3][4][5]
- * - If Map[1] says "Huge":
- *   - You are at Factory #1.
- *   - Location = Factory_Base + 2345 (Offset includes more digits).
- *
- * Contrast:
- * - 4KB Offset: 12 bits (0-4095)
- * - 2MB Offset: 21 bits (0-2097151)
- * - ∴ Huge page absorbs the next table's index into the offset.
+ * WORKED EXAMPLE: FIND 2MB HUGE PAGE IN KERNEL DIRECT MAP
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ VA = 0xFFFF89DF00000000 (page_offset_base)                            │
+ * │                                                                        │
+ * │ Indices:                                                               │
+ * │ PML4 = (VA >> 39) & 0x1FF = 275 (kernel space, index > 255)           │
+ * │ PDPT = (VA >> 30) & 0x1FF = 380                                       │
+ * │ PD   = (VA >> 21) & 0x1FF = 0                                         │
+ * │                                                                        │
+ * │ Walk:                                                                  │
+ * │ 1. PML4[275] → PDPT_phys (P=1, skip)                                  │
+ * │ 2. PDPT[380] → check PS: if 1, 1GB page (unlikely for direct map)     │
+ * │                if 0, get PD_phys                                       │
+ * │ 3. PD[0] → check PS: if 1, 2MB page (EXPECTED for direct map!)        │
+ * │            Physical = (entry & 0x000FFFFFFFE00000) | (VA & 0x1FFFFF)  │
+ * └────────────────────────────────────────────────────────────────────────┘
  */
 
 #include <linux/module.h>
@@ -92,7 +87,7 @@ static int demo_huge_show(struct seq_file* m, void* v) {
     unsigned long cr3, pml4_phys, pdpt_phys, pd_phys;
     unsigned long *pml4, *pdpt, *pd;
     unsigned long entry;
-    int i, j, huge_count = 0;
+    int i, j, k, huge_count = 0;
 
     asm volatile("mov %%cr3, %0" : "=r"(cr3));
     pml4_phys = cr3 & PTE_ADDR_MASK;
@@ -102,55 +97,77 @@ static int demo_huge_show(struct seq_file* m, void* v) {
     seq_printf(m, "DEMO 05: HUGE PAGE DETECTION\n");
     seq_printf(m, "═══════════════════════════════════════════════════════════\n\n");
 
-    seq_printf(m, "FORMULA: is_huge = (entry >> 7) & 1\n\n");
+    seq_printf(m, "FORMULA: is_huge = (entry >> 7) & 1\n");
     seq_printf(m, "page_offset_base = 0x%lx\n\n", page_offset_base);
 
-    /* Walk kernel space looking for huge pages */
+    /*
+     * Scan kernel space (PML4 indices 256-511)
+     * Looking for PS=1 entries at PDPT and PD levels
+     *
+     * Memory access pattern:
+     * For each present PML4[i]:
+     *   Read PDPT table (512 × 8 = 4096 bytes)
+     *   For each present PDPT[j]:
+     *     If PS=1: found 1GB huge page
+     *     Else: Read PD table
+     *       For each present PD[k]:
+     *         If PS=1: found 2MB huge page
+     */
     seq_printf(m, "SCANNING KERNEL SPACE FOR HUGE PAGES:\n");
     seq_printf(m, "────────────────────────────────────────────────────────\n");
 
     for (i = 256; i < 512 && huge_count < 10; i++) {
-        /* Check Present */
-        if (!(pml4[i] & 1)) continue;
+        if (!(pml4[i] & 1)) continue; /* P=0, skip */
 
         pdpt_phys = pml4[i] & PTE_ADDR_MASK;
         pdpt = (unsigned long*)__va(pdpt_phys);
 
         for (j = 0; j < 512 && huge_count < 10; j++) {
             entry = pdpt[j];
-            if (!(entry & 1)) continue;
+            if (!(entry & 1)) continue; /* P=0, skip */
 
-            /* Check for 1 GB huge page at PDPT level */
+            /*
+             * Check 1GB huge page at PDPT level
+             * PS = (entry >> 7) & 1
+             *
+             * If entry = 0x80000002FAE001A1:
+             * 0xA1 >> 7 = 1, so PS = 1
+             */
             if ((entry >> 7) & 1) {
                 seq_printf(m, "1 GB HUGE @ PML4[%d] PDPT[%d]\n", i, j);
                 seq_printf(m, "  entry = 0x%016lx\n", entry);
-                seq_printf(m, "  bit 7 = 1 → 1 GB page\n");
-                seq_printf(m, "  phys base = 0x%lx\n\n", entry & HUGE_1GB_MASK);
+                seq_printf(m, "  PS = (0x%lx >> 7) & 1 = 1\n", entry & 0xFF);
+                seq_printf(m, "  phys_base = entry & 0x%lx = 0x%lx\n", HUGE_1GB_MASK,
+                           entry & HUGE_1GB_MASK);
                 huge_count++;
                 continue;
             }
 
-            /* Descend to PD */
+            /* PS=0, descend to PD */
             pd_phys = entry & PTE_ADDR_MASK;
             pd = (unsigned long*)__va(pd_phys);
 
-            /* Check first few PD entries for 2 MB huge */
-            int k;
             for (k = 0; k < 512 && huge_count < 10; k++) {
                 entry = pd[k];
                 if (!(entry & 1)) continue;
 
+                /*
+                 * Check 2MB huge page at PD level
+                 */
                 if ((entry >> 7) & 1) {
                     seq_printf(m, "2 MB HUGE @ PML4[%d] PDPT[%d] PD[%d]\n", i, j, k);
                     seq_printf(m, "  entry = 0x%016lx\n", entry);
-                    seq_printf(m, "  bit 7 = (0x%lx >> 7) & 1 = 1\n", entry & 0xFFF);
-                    seq_printf(m, "  phys base = 0x%lx\n\n", entry & HUGE_2MB_MASK);
+                    seq_printf(m, "  PS = (0x%lx >> 7) & 1 = 1\n", entry & 0xFF);
+                    seq_printf(m, "  phys_base = entry & 0x%lx = 0x%lx\n", HUGE_2MB_MASK,
+                               entry & HUGE_2MB_MASK);
                     huge_count++;
                     if (huge_count >= 10) break;
                 }
             }
         }
     }
+
+    seq_printf(m, "\nTotal huge pages found (limit 10): %d\n", huge_count);
 
     return 0;
 }

@@ -1,65 +1,85 @@
 /*
- * DEMO 19: COPY-ON-WRITE
- * ══════════════════════
+ * ═══════════════════════════════════════════════════════════════════════════
+ * DEMO 19: COPY-ON-WRITE MECHANICS
+ * Machine: AMD Ryzen 5 4600H | RAM = 15406 MB
+ * ═══════════════════════════════════════════════════════════════════════════
  *
- * AXIOMATIC DIAGNOSIS (7 Ws)
- * ──────────────────────────
+ * COW ALGORITHM OVERVIEW:
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ 1. fork() called                                                      │
+ * │ 2. For each writable page in parent:                                  │
+ * │    a. Mark PTE R/W = 0 (read-only) in BOTH parent and child          │
+ * │    b. Increment page reference count (mapcount)                       │
+ * │    c. Child PTE points to SAME physical page                         │
+ * │ 3. On write attempt:                                                  │
+ * │    a. Page fault (write to read-only)                                 │
+ * │    b. Check: Is VMA writable? If yes: COW situation                  │
+ * │    c. Allocate new physical page                                      │
+ * │    d. Copy 4096 bytes                                                 │
+ * │    e. Update faulting process PTE: new phys, R/W=1                   │
+ * │    f. Decrement old page mapcount                                     │
+ * │    g. Flush TLB                                                       │
+ * │    h. Retry faulting instruction                                      │
+ * └────────────────────────────────────────────────────────────────────────┘
  *
- * 1. WHAT:
- *    Input: Process A forks Process B.
- *    Action: Share Physical Pages. Mark Read-Only.
- *    Output: A and B see same data. Memory usage = 1x (not 2x).
+ * NUMERICAL EXAMPLE: 512 MB PROCESS FORKS
+ * ─────────────────────────────────────────────────────────────────────────
+ * Without COW:
+ * 01. Pages to copy = 512 MB / 4 KB = 131,072 pages
+ * 02. Copy time @ 10 GB/s = 512 MB / 10,000 MB/s = 51.2 ms
+ * 03. RAM used = 512 + 512 = 1024 MB
  *
- *    Computation:
- *    Parent: Virt 0x4000 -> Phys 0x9000 (R=1, W=0).
- *    Child:  Virt 0x4000 -> Phys 0x9000 (R=1, W=0).
+ * With COW:
+ * 04. Pages to copy = 0 (data pages)
+ * 05. PTEs to update ≈ 131,072 × 8 bytes = 1 MB of table entries
+ * 06. Fork time ≈ 1 MB / 10,000 MB/s + overhead ≈ 0.1 ms
+ * 07. RAM used = 512 MB (shared)
+ * 08. SPEEDUP = 51.2 / 0.1 = 512×
+ * ─────────────────────────────────────────────────────────────────────────
  *
- * 2. WHY:
- *    - Efficiency.
- *    - `fork()` is often followed by `exec()`.
- *    - If we copied 1GB of Parent RAM to Child, and Child immediately
- *      replaced it with `exec()`, we wasted 1GB copy time.
+ * PTE BIT CHANGES:
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ Before fork (parent only):                                            │
+ * │   PTE = 0x00000003FAE00067                                            │
+ * │         ──────────────────                                            │
+ * │         0x67 = 0110_0111 = P R/W U A D - - -                          │
+ * │                   ↑                                                    │
+ * │                   R/W = 1 (writable)                                  │
+ * │                                                                        │
+ * │ After fork (both parent and child):                                   │
+ * │   PTE = 0x00000003FAE00065                                            │
+ * │         ──────────────────                                            │
+ * │         0x65 = 0110_0101 = P - U A D - - -                            │
+ * │                   ↑                                                    │
+ * │                   R/W = 0 (read-only, but VMA says writable = COW)    │
+ * │                                                                        │
+ * │ After child writes (child only):                                      │
+ * │   Child PTE = 0x0000000456780067                                      │
+ * │               ──────────────────                                      │
+ * │               New phys = 0x456780000, R/W = 1                         │
+ * │   Parent PTE = 0x00000003FAE00067 (if only user left, restore R/W=1) │
+ * └────────────────────────────────────────────────────────────────────────┘
  *
- * 3. WHERE:
- *    - Page Table Entries (R/W bit = 0).
- *    - `vm_area_struct` (VM_WRITE = 1).
- *    - Mismatch (PTE=RO, VMA=RW) triggers Logic.
- *
- * 4. WHO:
- *    - Page Fault Handler.
- *    - Sees Write Fault on Read-Only page.
- *    - Checks VMA: "Is this SUPPOSED to be writable?"
- *    - Yes -> It's a COW page -> Copy it.
- *
- * 5. WHEN:
- *    - `fork()`.
- *    - `mmap()` private file mappings.
- *
- * 6. WITHOUT:
- *    - Fork bombing would be trivial (OOM instantly).
- *    - Chrome/Apache process creation would be 100x slower.
- *
- * 7. WHICH:
- *    - Anonymous private pages.
- *
- * ════════════════════════════════
- * DISTINCT NUMERICAL PUZZLE
- * ════════════════════════════════
- * Scenario: School Worksheet
- * - Teacher has 1 Master Copy.
- * - Class has 30 Students.
- *
- * Naive (No COW):
- * - Teacher photocopies 30 times. (Slow, Wastes Paper).
- * - Students read.
- *
- * COW:
- * - Teacher projects Master Copy on board. (0 Paper).
- * - Students read.
- * - Student A wants to write an answer.
- * - Student A copies text to their notebook (1 Page used).
- * - Writes on notebook.
- * - 29 Students still reading board.
+ * PAGE FAULT FLOW:
+ * ┌────────────────────────────────────────────────────────────────────────┐
+ * │ CPU executes: MOV [0x7FFE5E4ED000], RAX (write instruction)           │
+ * │                                                                        │
+ * │ 1. TLB lookup: 0x7FFE5E4ED000 → TLB miss or hit                       │
+ * │ 2. Page walk: PTE found, P=1, R/W=0                                   │
+ * │ 3. Permission check: Write to R/W=0 → FAIL                            │
+ * │ 4. Exception #14 (Page Fault):                                        │
+ * │    CR2 = 0x7FFE5E4ED000 (faulting address)                            │
+ * │    Error code = 0x7:                                                  │
+ * │      bit 0 = 1 (P: page was present)                                  │
+ * │      bit 1 = 1 (W: write access)                                      │
+ * │      bit 2 = 1 (U: user mode)                                         │
+ * │                                                                        │
+ * │ 5. Kernel handler:                                                     │
+ * │    if (vma->vm_flags & VM_WRITE && is_cow_mapping(pte))               │
+ * │        do_wp_page(pte, vma);  // COW path                             │
+ * │    else                                                               │
+ * │        send_sigsegv();  // Real permission violation                  │
+ * └────────────────────────────────────────────────────────────────────────┘
  */
 
 #include <linux/mm.h>
@@ -74,63 +94,93 @@ MODULE_DESCRIPTION("Demo 19: Copy-on-Write");
 #define PTE_ADDR_MASK 0x000FFFFFFFFFF000UL
 
 static int demo_cow_show(struct seq_file* m, void* v) {
+    unsigned long cr3;
+    unsigned long* pml4;
+    int i, ro_count = 0, rw_count = 0;
+
+    asm volatile("mov %%cr3, %0" : "=r"(cr3));
+    pml4 = (unsigned long*)__va(cr3 & PTE_ADDR_MASK);
+
     seq_printf(m, "═══════════════════════════════════════════════════════════\n");
     seq_printf(m, "DEMO 19: COPY-ON-WRITE (COW)\n");
     seq_printf(m, "═══════════════════════════════════════════════════════════\n\n");
 
+    /*
+     * COW SAVINGS CALCULATION:
+     *
+     * Given: Parent = 512 MB, fork() called
+     *
+     * Without COW:
+     *   Copy 512 MB data = 131072 pages × 4096 bytes = 536,870,912 bytes
+     *   At 10 GB/s: 536,870,912 / 10,737,418,240 = 0.05 sec = 50 ms
+     *   RAM: 512 + 512 = 1024 MB
+     *
+     * With COW:
+     *   Copy ~0 bytes (only page table structure)
+     *   Update 131072 PTEs × 8 bytes = 1 MB
+     *   At 10 GB/s: 1 MB / 10 GB/s = 0.0001 sec = 0.1 ms
+     *   RAM: 512 MB (shared)
+     *
+     * Speedup: 50 / 0.1 = 500×
+     * RAM savings: 512 MB
+     */
     seq_printf(m, "FORK WITHOUT COW:\n");
     seq_printf(m, "────────────────────────────────────────────────────────\n");
-    seq_printf(m, "  Parent: 100 MB of data\n");
-    seq_printf(m, "  fork() → copy 100 MB to child (slow)\n");
-    seq_printf(m, "  Total RAM: 200 MB\n");
-    seq_printf(m, "  Time: O(memory size)\n\n");
+    seq_printf(m, "  Parent: 512 MB data\n");
+    seq_printf(m, "  fork() → copy 131072 pages × 4096 bytes\n");
+    seq_printf(m, "         = 536,870,912 bytes\n");
+    seq_printf(m, "  Time @ 10GB/s: 50 ms\n");
+    seq_printf(m, "  Total RAM: 1024 MB\n\n");
 
     seq_printf(m, "FORK WITH COW:\n");
     seq_printf(m, "────────────────────────────────────────────────────────\n");
-    seq_printf(m, "  Parent: 100 MB of data\n");
-    seq_printf(m, "  fork() → share pages, mark read-only\n");
-    seq_printf(m, "  Total RAM: 100 MB (shared)\n");
-    seq_printf(m, "  Time: O(page tables only)\n\n");
+    seq_printf(m, "  Parent: 512 MB data\n");
+    seq_printf(m, "  fork() → share pages, mark R/W=0\n");
+    seq_printf(m, "  Time: ~0.1 ms (update PTEs only)\n");
+    seq_printf(m, "  Total RAM: 512 MB (shared)\n");
+    seq_printf(m, "  Speedup: 500×\n\n");
 
     seq_printf(m, "ON WRITE:\n");
     seq_printf(m, "────────────────────────────────────────────────────────\n");
-    seq_printf(m, "  1. Child writes to page\n");
-    seq_printf(m, "  2. Page fault (write to read-only)\n");
-    seq_printf(m, "  3. Kernel checks: COW page?\n");
-    seq_printf(m, "  4. Allocate new physical page\n");
-    seq_printf(m, "  5. Copy old page to new page\n");
-    seq_printf(m, "  6. Update child's PTE: new phys, RW=1\n");
-    seq_printf(m, "  7. Resume child at write instruction\n\n");
+    seq_printf(m, "  1. Write to shared page → Page fault\n");
+    seq_printf(m, "  2. Error code = 0x7 (present, write, user)\n");
+    seq_printf(m, "  3. Kernel: check VMA.vm_flags & VM_WRITE\n");
+    seq_printf(m, "  4. If true: allocate new page, copy 4096 bytes\n");
+    seq_printf(m, "  5. Update PTE: new phys, R/W=1\n");
+    seq_printf(m, "  6. Flush TLB, retry write\n\n");
 
-    seq_printf(m, "PTE FLAGS CHANGE:\n");
-    seq_printf(m, "────────────────────────────────────────────────────────\n");
-    seq_printf(m, "  Before fork:  entry & 2 = 1 (RW)\n");
-    seq_printf(m, "  After fork:   entry & 2 = 0 (RO) ← both processes\n");
-    seq_printf(m, "  After write:  entry & 2 = 1 (RW) ← only writer\n\n");
-
-    /* Show current process's page table write bits */
-    seq_printf(m, "CURRENT PROCESS PAGE TABLE:\n");
+    /*
+     * Scan user-space PML4 entries (0-255) for R/W bit distribution
+     * This shows how many entries are currently writable vs read-only
+     */
+    seq_printf(m, "CURRENT PROCESS PML4 R/W ANALYSIS:\n");
     seq_printf(m, "────────────────────────────────────────────────────────\n");
 
-    unsigned long cr3;
-    asm volatile("mov %%cr3, %0" : "=r"(cr3));
-    unsigned long pml4_phys = cr3 & PTE_ADDR_MASK;
-    unsigned long* pml4 = (unsigned long*)__va(pml4_phys);
-
-    int ro_count = 0, rw_count = 0;
-    int i;
     for (i = 0; i < 256; i++) {
-        if (pml4[i] & 1) {
-            if (pml4[i] & 2)
+        if (pml4[i] & 1) { /* P = 1 */
+            if (pml4[i] & 2) {
                 rw_count++;
-            else
+            } else {
                 ro_count++;
+                /*
+                 * R/W=0 entries might be:
+                 * 1. COW marked pages
+                 * 2. Genuine read-only pages (.text)
+                 * 3. Read-only shared library mappings
+                 */
+            }
         }
     }
 
-    seq_printf(m, "  User space PML4 entries:\n");
-    seq_printf(m, "  RW=1: %d entries\n", rw_count);
-    seq_printf(m, "  RW=0: %d entries\n", ro_count);
+    seq_printf(m, "  User PML4[0-255]: %d present\n", ro_count + rw_count);
+    seq_printf(m, "  R/W=1 (writable): %d\n", rw_count);
+    seq_printf(m, "  R/W=0 (read-only or COW): %d\n\n", ro_count);
+
+    seq_printf(m, "PTE FLAG CHANGE (bit 1 = R/W):\n");
+    seq_printf(m, "────────────────────────────────────────────────────────\n");
+    seq_printf(m, "  Before fork: 0x67 = 0110_0111 (R/W=1 at bit 1)\n");
+    seq_printf(m, "  After fork:  0x65 = 0110_0101 (R/W=0 at bit 1)\n");
+    seq_printf(m, "  After write: 0x67 = 0110_0111 (R/W=1, new page)\n");
 
     return 0;
 }
