@@ -90,8 +90,33 @@ Welcome to LECPP, a collection of C++ problems, assembly derivations, and low-le
 |:---|:--------------------------|:--------------------------|:------------|
 | D01| Read CR3 Register         | demo_01_read_cr3/         | Done        |
 | D02| Extract Page Indices      | demo_02_extract_indices/  | Done        |
+| D03| Read Page Table Entry     | demo_03_read_entry/       | Done        |
+| D04| Check Present Bit         | demo_04_check_present/    | Done        |
+| D05| Detect Huge Pages         | demo_05_check_huge/       | Done        |
+| D06| Extract Physical Address  | demo_06_extract_address/  | Done        |
+| D07| 4KB Page Walk             | demo_07_walk_4kb/         | Done        |
+| D08| 2MB Page Walk             | demo_08_walk_2mb/         | Done        |
+| D09| 1GB Page Walk             | demo_09_walk_1gb/         | Done        |
+| D10| __va Macro Compare        | demo_10_compare_va/       | Done        |
 | D11| Dump PML4 Table           | demo_11_dump_pml4/        | Done        |
+| D12| Process CR3               | demo_12_process_cr3/      | Done        |
 | D13| Zone Information          | demo_13_zone_info/        | Done        |
+| D14| Page Flags                | demo_14_page_flags/       | Done        |
+| D15| VMA Walk                  | demo_15_vma_walk/         | Done        |
+| D16| Slab Allocator            | demo_16_slab_info/        | Done        |
+| D17| Buddy Allocator           | demo_17_buddy_alloc/      | Done        |
+| D18| TLB Flush                 | demo_18_tlb_flush/        | Done        |
+| D19| Copy-on-Write             | demo_19_cow_demo/         | Done        |
+| D20| Swap Subsystem            | demo_20_swap_info/        | Done        |
+
+## Memory Management Exercises (Axiomatic)
+
+| ID | Title                     | Folder                    | Status      |
+|:---|:--------------------------|:--------------------------|:------------|
+| E01| Page Refcount Bug         | exercises_mm/page_refcount_bug.c | Done   |
+| E02| Buddy Fragmentation       | exercises_mm/buddy_fragment.c    | Done   |
+| E03| GFP Context Bug           | exercises_mm/gfp_context_bug.c   | Done   |
+| WS | MM Worksheet              | exercises_mm/worksheet.md        | Done   |
 
 ## Build and Run
 
