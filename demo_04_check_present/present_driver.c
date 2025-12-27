@@ -2,30 +2,75 @@
  * DEMO 04: CHECK PRESENT BIT
  * ══════════════════════════
  *
- * ENTRY FORMAT: 64 bits
- * bit 0 = Present (P)
- *   1 = valid entry
- *   0 = not present → page fault if accessed
+ * AXIOMATIC DIAGNOSIS (7 Ws)
+ * ──────────────────────────
  *
- * EXAMPLE 1: entry = 0x80000002FAE001A1
- *   0x1A1 = 0001_1010_0001
- *   bit 0 = 1 → Present ✓
+ * 1. WHAT:
+ *    Input:  Entry = 0x80000002FAE00067
+ *    Action: Check Bit 0 (LSB)
+ *    Output: 1 (Present) or 0 (Not Present)
  *
- * EXAMPLE 2: entry = 0x0000000000000000
- *   bit 0 = 0 → Not Present ✗
+ *    Calculation:
+ *    0x80000002FAE00067 (hex)
+ *    Bin: 1000...0010_1111_1010_1110_0000_0000_0000_0110_0111
+ *                                                       ^
+ *                                                       LSB is 1
+ *    0x67 = 0110_0111
+ *    0x67 & 0x01 = 0x01 (True)
  *
- * EXAMPLE 3: entry = 0x80000002FAE001A0
- *   0x1A0 = 0001_1010_0000
- *   bit 0 = 0 → Not Present ✗
- *   (has address bits but still not present!)
+ * 2. WHY:
+ *    - RAM is limited (16GB). Virtual Space is huge (256TB).
+ *    - Not all Virtual pages can be in Physical RAM.
+ *    - We need a marker: "Is this page in RAM right now?"
+ *    - Bit 0 = 0 → Page is on Disk (Swap) or Invalid.
+ *    - Bit 0 = 1 → Page is in RAM.
  *
- * OTHER FLAGS (for reference):
- *   bit 1 = R/W (0=read-only, 1=writable)
- *   bit 2 = U/S (0=kernel, 1=user)
- *   bit 5 = Accessed
- *   bit 6 = Dirty
- *   bit 7 = PS (Page Size)
- *   bit 63 = NX (No Execute)
+ * 3. WHERE:
+ *    - Bit 0 of the 64-bit Page Table Entry.
+ *    - Located at physical address derived in Demo 03.
+ *
+ * 4. WHO:
+ *    - MMU (Hardware): Checks this bit *before* reading any other bit.
+ *    - If 0, MMU raises Exception #14 (Page Fault).
+ *    - If 1, MMU proceeds to check R/W, U/S, etc.
+ *
+ * 5. WHEN:
+ *    - Every single memory access (read or write).
+ *    - Example: `MOV RAX, [0xADDR]` triggers check.
+ *
+ * 6. WITHOUT:
+ *    - If Bit 0 didn't exist:
+ *    - CPU would assume address 0x0 is valid.
+ *    - Or CPU would assume invalid address points to random RAM.
+ *    - Result: Corruption or Security Hole.
+ *
+ * 7. WHICH:
+ *    - Bit 0 only.
+ *    - Bits 1-63 are ignored by MMU if Bit 0 is 0 (mostly).
+ *    - (OS uses bits 1-63 for swap location if P=0).
+ *
+ * ════════════════════════════════
+ * DISTINCT NUMERICAL PUZZLE
+ * ════════════════════════════════
+ * Scenario: Office Building Directions
+ * - Directory lists 512 Employee Names.
+ * - Next to name: Room Number (Address).
+ * - BUT: Employee might be "Out of Office".
+ *
+ * Input:
+ * - Entry: "Smith | Room 302 | Present: No"
+ *
+ * Action:
+ * - Visitor checks "Present" column FIRST.
+ * - If "No", ignores "Room 302" (might be stale).
+ * - Goes to Reception (Page Fault Handler).
+ *
+ * Numerical Analogy:
+ * - Entry = 3020 (decimal)
+ * - If even (ends in 0) -> Out.
+ * - If odd (ends in 1) -> In.
+ * - 3020 / 2 = 1510 remainder 0 -> Out.
+ * - 3021 / 2 = 1510 remainder 1 -> In.
  */
 
 #include <linux/module.h>
@@ -91,20 +136,6 @@ static int demo_present_show(struct seq_file* m, void* v) {
             seq_printf(m, "PML4[%d] = 0x%016lx\n", i, entry);
             decode_flags(m, entry);
             seq_printf(m, "\n");
-        }
-    }
-
-    /* Show first 5 kernel space entries */
-    seq_printf(m, "KERNEL SPACE (256-511, first 5 present):\n");
-    seq_printf(m, "────────────────────────────────────────────────────────\n");
-    int shown = 0;
-    for (i = 256; i < 512 && shown < 5; i++) {
-        entry = pml4_virt[i];
-        if (entry & 1) {
-            seq_printf(m, "PML4[%d] = 0x%016lx\n", i, entry);
-            decode_flags(m, entry);
-            seq_printf(m, "\n");
-            shown++;
         }
     }
 

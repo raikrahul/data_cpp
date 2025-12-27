@@ -2,12 +2,64 @@
  * DEMO 16: SLAB INFO
  * ══════════════════
  *
- * Slab allocator = efficient allocation of fixed-size objects
+ * AXIOMATIC DIAGNOSIS (7 Ws)
+ * ──────────────────────────
  *
- * cat /proc/slabinfo shows caches
- * Common caches: task_struct, mm_struct, dentry, inode
+ * 1. WHAT:
+ *    Input: Requested Object Size (e.g., 64 bytes).
+ *    Action: Retrieve initialized object from "Cache".
+ *    Output: Pointer to Object.
  *
- * Uses kmem_cache_alloc() instead of kmalloc() for known sizes
+ *    Computation:
+ *    Page = 4096 bytes.
+ *    Object = 64 bytes.
+ *    Objects/Page = 4096 / 64 = 64 objects.
+ *
+ * 2. WHY:
+ *    - To reduce "Internal Fragmentation".
+ *    - Using 4KB page for 64-byte object = 98% waste.
+ *    - To reduce "Initialization Overhead".
+ *    - Constructor runs once per object lifetime, not per alloc/free.
+ *
+ * 3. WHERE:
+ *    - Inside Kernel Pages (Linear Map).
+ *    - Managed by `kmem_cache` struct.
+ *
+ * 4. WHO:
+ *    - Slab Allocator (SLUB/SLAB/SLOB).
+ *    - Kernel subsystems (`task_struct`, `inode`).
+ *
+ * 5. WHEN:
+ *    - High-frequency allocation of fixed-size structures.
+ *    - Filesystem activity (millions of inodes).
+ *    - Network traffic (millions of packets/sk_buffs).
+ *
+ * 6. WITHOUT:
+ *    - `kmalloc` would be slow.
+ *    - Memory fragmentation would crash system in days.
+ *
+ * 7. WHICH:
+ *    - Which Cache? Determined by Name or Size.
+ *    - "kmalloc-64", "task_struct", etc.
+ *
+ * ════════════════════════════════
+ * DISTINCT NUMERICAL PUZZLE
+ * ════════════════════════════════
+ * Scenario: Cookie Factory
+ * - Dough Sheet (Page) = 4096 sq cm.
+ * - Cookie (Object) = 64 sq cm.
+ *
+ * Process 1 (Buddy/Raw):
+ * - Customer orders 1 cookie.
+ * - Need 1 sheet. Cut 1 cookie. Throw away rest.
+ * - Waste = 4032 sq cm.
+ *
+ * Process 2 (Slab):
+ * - Pre-cut entire sheet into 64 cookies.
+ * - Store them in "Ready Tray".
+ * - Customer orders 1 cookie.
+ * - Hand out #1. (0 sec cut time).
+ * - Customer returns cookie (Free)? Put back in slot #1.
  */
 
 #include <linux/module.h>

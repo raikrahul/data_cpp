@@ -2,30 +2,76 @@
  * DEMO 05: CHECK HUGE PAGE BIT
  * ════════════════════════════
  *
- * bit 7 = PS (Page Size)
- *   0 = entry points to next table
- *   1 = entry IS the page (huge page)
+ * AXIOMATIC DIAGNOSIS (7 Ws)
+ * ──────────────────────────
  *
- * WHERE PS BIT IS CHECKED:
- *   PML4: bit 7 reserved (must be 0)
- *   PDPT: bit 7 = 1 → 1 GB huge page
- *   PD:   bit 7 = 1 → 2 MB huge page
- *   PT:   no PS bit (always 4 KB)
+ * 1. WHAT:
+ *    Input: L2 (PD) Entry or L3 (PDPT) Entry
+ *    Action: Check Bit 7 (PS - Page Size)
+ *    Output: 0 = Table Pointer, 1 = Huge Page
  *
- * EXAMPLE FROM YOUR MACHINE:
- *   PD[180] = 0x80000002FAE001A1
- *   0x1A1 = 0001_1010_0001
- *   bit 7 = (0x1A1 >> 7) & 1 = 1 → HUGE PAGE (2 MB)
+ *    Computation:
+ *    Entry = 0x80000002FAE001A1
+ *    Bit 7 = (Entry >> 7) & 1
+ *    0x1A1 in binary: ...0001_1010_0001
+ *    Right Shift 7:   ...0000_0000_0011 (0x3)
+ *    Limit to LSBit:  0x3 & 1 = 1
+ *    ∴ Bit 7 is 1.
  *
- * OFFSET CALCULATION CHANGES:
- *   4 KB page: offset = bits [11:0] = 12 bits = 0xFFF
- *   2 MB page: offset = bits [20:0] = 21 bits = 0x1FFFFF
- *   1 GB page: offset = bits [29:0] = 30 bits = 0x3FFFFFFF
+ * 2. WHY:
+ *    - To map 2MB or 1GB with fewer tables.
+ *    - Standard 4KB: PML4 → PDPT → PD → PT → Page (4 levels)
+ *    - Huge 2MB:     PML4 → PDPT → PD → Page (3 levels)
+ *    - Huge 1GB:     PML4 → PDPT → Page (2 levels)
+ *    - Saves RAM (fewer PTs). Saves TLB entries (coverage).
  *
- * ADDRESS MASK CHANGES:
- *   4 KB: mask = 0x000FFFFFFFFFF000 (clear low 12)
- *   2 MB: mask = 0x000FFFFFFFE00000 (clear low 21)
- *   1 GB: mask = 0x000FFFFFC0000000 (clear low 30)
+ * 3. WHERE:
+ *    - Bit 7 of the Entry.
+ *    - ONLY valid at PDPT (L3) and PD (L2) levels.
+ *    - Ignored/Reserved at PML4 (L4) and PT (L1).
+ *
+ * 4. WHO:
+ *    - MMU (Hardware).
+ *    - If Bit 7=1 at PD level:
+ *      MMU stops walking. Uses Entry[51:21] as Base Address.
+ *      Uses VA[20:0] as Offset.
+ *
+ * 5. WHEN:
+ *    - During page walk.
+ *    - At Step 2 (PDPT) or Step 3 (PD).
+ *
+ * 6. WITHOUT:
+ *    - Must use 4KB pages for everything.
+ *    - 1TB RAM would need 2GB just for Page Tables.
+ *    - TLB thrashing on large datasets (DBs, VMs).
+ *
+ * 7. WHICH:
+ *    - 2MB Page: PS=1 in PD. Offset = 21 bits (2MB).
+ *    - 1GB Page: PS=1 in PDPT. Offset = 30 bits (1GB).
+ *
+ * ════════════════════════════════
+ * DISTINCT NUMERICAL PUZZLE
+ * ════════════════════════════════
+ * Scenario: City Zoning
+ * - Standard Zone: 4km x 4km blocks.
+ * - Industrial Zone: 1 huge 100km x 100km block.
+ *
+ * Map Legend (bit 7):
+ * - 0 = "See detailed sub-map for this sector"
+ * - 1 = "This entire sector is one factory"
+ *
+ * Numerical Analogy:
+ * - Address = 12345
+ * - If Map[1] says "Standard":
+ *   - Look up Map[12][3][4][5]
+ * - If Map[1] says "Huge":
+ *   - You are at Factory #1.
+ *   - Location = Factory_Base + 2345 (Offset includes more digits).
+ *
+ * Contrast:
+ * - 4KB Offset: 12 bits (0-4095)
+ * - 2MB Offset: 21 bits (0-2097151)
+ * - ∴ Huge page absorbs the next table's index into the offset.
  */
 
 #include <linux/module.h>
@@ -64,6 +110,7 @@ static int demo_huge_show(struct seq_file* m, void* v) {
     seq_printf(m, "────────────────────────────────────────────────────────\n");
 
     for (i = 256; i < 512 && huge_count < 10; i++) {
+        /* Check Present */
         if (!(pml4[i] & 1)) continue;
 
         pdpt_phys = pml4[i] & PTE_ADDR_MASK;
@@ -104,8 +151,6 @@ static int demo_huge_show(struct seq_file* m, void* v) {
             }
         }
     }
-
-    seq_printf(m, "Found %d huge pages (showing max 10)\n", huge_count);
 
     return 0;
 }

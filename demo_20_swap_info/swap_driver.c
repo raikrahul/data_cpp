@@ -2,8 +2,69 @@
  * DEMO 20: SWAP INFO
  * ══════════════════
  *
- * Swap = disk extension of RAM
- * Note: si_swapinfo not exported to modules, using si_meminfo instead
+ * AXIOMATIC DIAGNOSIS (7 Ws)
+ * ──────────────────────────
+ *
+ * 1. WHAT:
+ *    Input: Page in RAM. RAM is full.
+ *    Action: Evict page to Disk (SSD/HDD).
+ *    Output: PTE marked "Prohibited" (P=0). Address points to Disk Sector.
+ *
+ *    Computation:
+ *    P=0.
+ *    Type (5 bits) = /dev/sda2.
+ *    Offset (50 bits) = Sector 1,000,000.
+ *
+ * 2. WHY:
+ *    - To extend RAM limit.
+ *    - 16GB RAM + 32GB Swap = 48GB available memory.
+ *    - Unused data (background tabs) shouldn't occupy precious RAM.
+ *
+ * 3. WHERE:
+ *    - Swap Partition or Swap File.
+ *    - PTE stores the location cookie.
+ *
+ * 4. WHO:
+ *    - kswapd: Kernel thread wakes up when free memory low.
+ *    - Page Fault Handler: Wakes up when user touches P=0 page.
+ *
+ * 5. WHEN:
+ *    - Memory Pressure.
+ *    - Hibernation (Suspend to Disk).
+ *
+ * 6. WITHOUT:
+ *    - Out Of Memory (OOM) Killer triggers immediately on full RAM.
+ *    - App Crashes.
+ *
+ * 7. WHICH:
+ *    - Anonymous pages (Heap/Stack).
+ *    - File pages are just dropped (re-read from file later), not swapped.
+ *
+ * ════════════════════════════════
+ * DISTINCT NUMERICAL PUZZLE
+ * ════════════════════════════════
+ * Scenario: Self-Storage
+ * - House (RAM) has 5 Rooms.
+ * - You have 6 Sets of Furniture.
+ *
+ * Logic:
+ * - Room 1: Bed.
+ * - Room 2: Sofa.
+ * ...
+ * - Room 5: Desk.
+ * - Set 6 (Old Piano): Doesn't fit.
+ *
+ * Action:
+ * - Move Old Piano to Warehouse (Disk).
+ * - Keep "Receipt" (PTE Swap Entry) in Room 5's drawer.
+ * - Room 5 is now Empty.
+ * - Put New Treadmill in Room 5.
+ *
+ * Access:
+ * - Time to play Piano?
+ * - Check Receipt. Go to Warehouse.
+ * - Move Treadmill to Warehouse.
+ * - Bring Piano back.
  */
 
 #include <linux/mm.h>

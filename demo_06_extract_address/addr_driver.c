@@ -2,27 +2,75 @@
  * DEMO 06: EXTRACT PHYSICAL ADDRESS FROM ENTRY
  * ═════════════════════════════════════════════
  *
- * ENTRY: 0x80000002FAE001A1
+ * AXIOMATIC DIAGNOSIS (7 Ws)
+ * ──────────────────────────
  *
- * CASE 1: Points to table (PS=0)
- *   mask = 0x000FFFFFFFFFF000 (bits [51:12])
- *   0x80000002FAE001A1 & 0x000FFFFFFFFFF000 = 0x2FAE00000
- *   Next table at physical 0x2FAE00000
+ * 1. WHAT:
+ *    Input:  Entry = 0x80000002FAE001A1
+ *    Action: Zero out Flags (bits 0-11, 52-63)
+ *    Output: 0x2FAE00000 (Pure Physical Address)
  *
- * CASE 2: 2 MB huge page (PS=1 at PD level)
- *   mask = 0x000FFFFFFFE00000 (bits [51:21])
- *   0x80000002FAE001A1 & 0x000FFFFFFFE00000 = 0x2FAE00000
- *   Page base at physical 0x2FAE00000
+ *    Computation (4KB):
+ *    Mask = 0x000FFFFFFFFFF000
+ *    0x80000002FAE001A1
+ *  & 0x000FFFFFFFFFF000
+ *    ──────────────────
+ *    0x00000002FAE00000 ✓
  *
- * CASE 3: 1 GB huge page (PS=1 at PDPT level)
- *   mask = 0x000FFFFFC0000000 (bits [51:30])
- *   0x80000002FAE001A1 & 0x000FFFFFC0000000 = 0x2C0000000
- *   Page base at physical 0x2C0000000
+ * 2. WHY:
+ *    - The Entry is a packed struct: [NX|...|Address|...|Flags].
+ *    - If we use Entry as a pointer directly:
+ *      Pointer = 0x80000002FAE001A1
+ *      NX bit (63) is set -> Valid in Kernel (maybe), but high bits wrong.
+ *      Flags (0-11) set -> Misaligned address.
+ *    - Must isolate the Address field.
  *
- * MASK DERIVATION:
- *   4 KB: clear low 12 bits → mask = ~0xFFF & 0x000FFFFFFFFFFFFF
- *   2 MB: clear low 21 bits → mask = ~0x1FFFFF & 0x000FFFFFFFFFFFFF
- *   1 GB: clear low 30 bits → mask = ~0x3FFFFFFF & 0x000FFFFFFFFFFFFF
+ * 3. WHERE:
+ *    - Bits [51:12] for 4KB Page Table Pointer.
+ *    - Bits [51:21] for 2MB Huge Page.
+ *    - Bits [51:30] for 1GB Huge Page.
+ *
+ * 4. WHO:
+ *    - Software (Driver): Must apply mask explicitly.
+ *    - Hardware (MMU): Ignores flags wires when driving address bus.
+ *
+ * 5. WHEN:
+ *    - Before calling `__va()` (Virtual Address macro).
+ *    - Before dereferencing the next table.
+ *
+ * 6. WITHOUT:
+ *    - `__va(0x80000002FAE001A1)`
+ *    - Adds Offset base to GARBAGE.
+ *    - Result: Points to nowhere -> Crash.
+ *
+ * 7. WHICH:
+ *    - 4KB Mask: Clear low 12 bits (FFF).
+ *    - 2MB Mask: Clear low 21 bits (1FFFFF).
+ *    - 1GB Mask: Clear low 30 bits (3FFFFFFF).
+ *
+ * ════════════════════════════════
+ * DISTINCT NUMERICAL PUZZLE
+ * ════════════════════════════════
+ * Scenario: Dirty Money
+ * - A Banknote has Serial Number (Value) and Graffiti (Flags).
+ * - Note: "888-123456-XXX"
+ * - 888 = Reserved Prefix (NX bit).
+ * - XXX = Dirt/Stamp (Flags).
+ * - 123456 = Value.
+ *
+ * Action:
+ * - To use the serial number, you must ERASE the graffiti.
+ * - Mask: "000-111111-000".
+ * - Apply Mask -> "000-123456-000" -> 123456.
+ *
+ * Numerical Analogy:
+ * - Value = 123456.
+ * - Noise = 900000 (Prefix) + 7 (Suffix).
+ * - Dirty = 900123463.
+ * - Mask = 000111110.
+ * - Clean = 000123460? No, digit masking.
+ * - 900123463 % 1000000 = 123463.
+ * - 123463 / 10 = 12346.
  */
 
 #include <linux/module.h>
@@ -49,28 +97,37 @@ static int demo_addr_show(struct seq_file* m, void* v) {
 
     /* 4 KB mask */
     addr_4kb = test_entry & MASK_4KB;
-    seq_printf(m, "4 KB PAGE (table pointer):\n");
-    seq_printf(m, "  mask = 0x%016lx (bits [51:12])\n", MASK_4KB);
-    seq_printf(m, "  0x%lx & 0x%lx = 0x%lx\n\n", test_entry, MASK_4KB, addr_4kb);
+    seq_printf(m, "CASE 1: 4 KB PAGE (table pointer)\n");
+    seq_printf(m, "  Assuming PS=0. Mask bits [51:12].\n");
+    seq_printf(m, "  0x%lx\n", test_entry);
+    seq_printf(m, "& 0x%lx\n", MASK_4KB);
+    seq_printf(m, "  ──────────────────\n");
+    seq_printf(m, "  0x%lx\n\n", addr_4kb);
 
     /* 2 MB mask */
     addr_2mb = test_entry & MASK_2MB;
-    seq_printf(m, "2 MB HUGE PAGE:\n");
-    seq_printf(m, "  mask = 0x%016lx (bits [51:21])\n", MASK_2MB);
-    seq_printf(m, "  0x%lx & 0x%lx = 0x%lx\n\n", test_entry, MASK_2MB, addr_2mb);
+    seq_printf(m, "CASE 2: 2 MB HUGE PAGE\n");
+    seq_printf(m, "  Assuming PS=1 at PD. Mask bits [51:21].\n");
+    seq_printf(m, "  0x%lx\n", test_entry);
+    seq_printf(m, "& 0x%lx\n", MASK_2MB);
+    seq_printf(m, "  ──────────────────\n");
+    seq_printf(m, "  0x%lx\n\n", addr_2mb);
 
     /* 1 GB mask */
     addr_1gb = test_entry & MASK_1GB;
-    seq_printf(m, "1 GB HUGE PAGE:\n");
-    seq_printf(m, "  mask = 0x%016lx (bits [51:30])\n", MASK_1GB);
-    seq_printf(m, "  0x%lx & 0x%lx = 0x%lx\n\n", test_entry, MASK_1GB, addr_1gb);
+    seq_printf(m, "CASE 3: 1 GB HUGE PAGE\n");
+    seq_printf(m, "  Assuming PS=1 at PDPT. Mask bits [51:30].\n");
+    seq_printf(m, "  0x%lx\n", test_entry);
+    seq_printf(m, "& 0x%lx\n", MASK_1GB);
+    seq_printf(m, "  ──────────────────\n");
+    seq_printf(m, "  0x%lx\n\n", addr_1gb);
 
-    /* Show mask derivations */
-    seq_printf(m, "MASK DERIVATIONS:\n");
+    seq_printf(m, "MASK DERIVATION AXIOMS:\n");
     seq_printf(m, "────────────────────────────────────────────────────────\n");
-    seq_printf(m, "4 KB: 2^12 - 1 = 4095 = 0xFFF → clear → bits [51:12]\n");
-    seq_printf(m, "2 MB: 2^21 - 1 = 2097151 = 0x1FFFFF → clear → bits [51:21]\n");
-    seq_printf(m, "1 GB: 2^30 - 1 = 1073741823 = 0x3FFFFFFF → clear → bits [51:30]\n");
+    seq_printf(m, "1. Address max width = 52 bits (Architecture Limit).\n");
+    seq_printf(m, "2. 4KB alignment = Low 12 bits are 0.\n");
+    seq_printf(m, "   ∴ Mask top 12 (Reserved) and bottom 12 (Flags).\n");
+    seq_printf(m, "   Inverse Mask: ~0xFFF = ...111000\n");
 
     return 0;
 }

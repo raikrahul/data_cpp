@@ -2,29 +2,78 @@
  * DEMO 03: READ PAGE TABLE ENTRY
  * ══════════════════════════════
  *
- * DATA: table_phys = 0x1337A3000 (from CR3)
- * DATA: index = 255 (PML4 index for 0x7FFE5E4ED123)
+ * AXIOMATIC DIAGNOSIS (7 Ws)
+ * ──────────────────────────
  *
- * FORMULA: entry_address = table_phys + (index × 8)
+ * 1. WHAT:
+ *    Input 1: Table_Base_Phys = 0x1337A3000 (from CR3)
+ *    Input 2: Index = 255 (extracted from VA 0x7FFE5E4ED123)
+ *    Action:  Calculate exact byte address of entry #255
+ *    Output:  Entry_Phys = 0x1337A37F8
  *
- * CALCULATION:
- *   entry_address = 0x1337A3000 + (255 × 8)
- *                 = 0x1337A3000 + 2040
- *                 = 0x1337A3000 + 0x7F8
- *                 = 0x1337A37F8
+ *    Computation:
+ *    Entry_Phys = Base + (Index × Entry_Size)
+ *    Entry_Phys = 0x1337A3000 + (255 × 8)
+ *    Entry_Phys = 0x1337A3000 + 2040 (decimal)
+ *    Entry_Phys = 0x1337A3000 + 0x7F8 (hex)
+ *      0x1337A3000
+ *    +       0x7F8
+ *    ─────────────
+ *      0x1337A37F8 ✓
  *
- * TO READ: Need virtual address
- *   page_offset_base = 0xFFFF89DF00000000
- *   entry_virt = 0xFFFF89DF00000000 + 0x1337A37F8
- *              = 0xFFFF89E0337A37F8
+ * 2. WHY:
+ *    - Memory is byte-addressable.
+ *    - Each PML4 entry is 64 bits = 8 bytes wide.
+ *    - Entry #0 is at +0 bytes.
+ *    - Entry #1 is at +8 bytes.
+ *    - Entry #255 is at +2040 bytes.
+ *    ∴ To read the 256th slot, we must offset by 255 × 8.
  *
- * READ: *(unsigned long *)0xFFFF89E0337A37F8 = entry value
+ * 3. WHERE:
+ *    - Physical Reality: Slot is at RAM address 0x1337A37F8
+ *    - Kernel Reality:   CPU cannot load physical directly.
+ *    - Virtual Mapping:  Must use Direct Map (page_offset_base).
+ *    - Target: 0xFFFF89DF00000000 + 0x1337A37F8 = 0xFFFF89E0337A37F8
  *
- * ENTRY FORMAT (64 bits):
- *   bits [51:12] = physical address of next table
- *   bits [11:0]  = flags
- *   bit 63       = NX (No Execute)
+ * 4. WHO:
+ *    - HW: MMU shifter (Index*8) and adder (Base+Offset).
+ *    - SW: `table_virt[index]` in C compiles to `MOV RAX, [Base + Index*8]`.
  *
+ * 5. WHEN:
+ *    - During page walk (Virtual → Physical translation).
+ *    - This is Step 1: Locating the PDPT pointer.
+ *
+ * 6. WITHOUT:
+ *    - If we just read 0x1337A37F8 (raw):
+ *      - CPU interprets it as Virtual Address.
+ *      - User space? Yes (< 0x7FFFFFFFFFFF).
+ *      - Mapped? No.
+ *      - Result: Page Fault (CR2 = 0x1337A37F8).
+ *    - ∴ __va() is mandatory.
+ *
+ * 7. WHICH:
+ *    - Which specific 8 bytes?
+ *    - Bytes [0x1337A37F8] to [0x1337A37FF] inclusive.
+ *    - 8 bytes total.
+ *
+ * ════════════════════════════════
+ * DISTINCT NUMERICAL PUZZLE
+ * ════════════════════════════════
+ * Scenario: Warehouse 'RAM'
+ * - Aisle 0 starts at meter 1,000,000.
+ * - Each Box is 8 meters wide.
+ * - We need Box 255.
+ *
+ * Calculation:
+ * 1. Stride = 8 meters.
+ * 2. Distance = 255 boxes × 8 meters/box = 2,040 meters.
+ * 3. Location = 1,000,000 + 2,040 = 1,002,040 meters.
+ *
+ * Verification:
+ * - Box 0: 1,000,000
+ * - Box 1: 1,000,008
+ * ...
+ * - Box 255: 1,002,040 ✓
  */
 
 #include <linux/module.h>
@@ -42,12 +91,22 @@ extern unsigned long page_offset_base;
 /*
  * read_entry: Read 8 bytes from physical table address at index
  *
- * table_phys = 0x1337A3000
- * index = 255
- * → byte_offset = 255 × 8 = 2040 = 0x7F8
- * → entry_phys = 0x1337A3000 + 0x7F8 = 0x1337A37F8
- * → entry_virt = __va(0x1337A37F8) = 0xFFFF89E0337A37F8
- * → entry_value = *(0xFFFF89E0337A37F8)
+ * CALCULATION TRACE:
+ * Input: table_phys = 0x1337A3000
+ * Input: index = 255
+ *
+ * 1. Offset = 255 << 3 (multiply by 8)
+ *    11111111 << 3 = 11111111000 = 0x7F8
+ *
+ * 2. Phys_Addr = 0x1337A3000 | 0x7F8
+ *    (OR works because low 12 bits of table_phys are 0)
+ *    = 0x1337A37F8
+ *
+ * 3. Virt_Addr = page_offset_base + Phys_Addr
+ *    = 0xFFFF89DF00000000 + 0x1337A37F8
+ *    = 0xFFFF89E0337A37F8
+ *
+ * 4. Load = *(unsigned long *)0xFFFF89E0337A37F8
  */
 static unsigned long read_entry(unsigned long table_phys, unsigned long index) {
     unsigned long* table_virt;
@@ -66,6 +125,13 @@ static int demo_entry_show(struct seq_file* m, void* v) {
 
     /* Read CR3 */
     asm volatile("mov %%cr3, %0" : "=r"(cr3));
+
+    /*
+     * MASKING AXIOM:
+     * CR3 = 0x1337A3000
+     * Mask = 0x000FFFFFFFFFF000
+     * Result = 0x1337A3000 (Bits 63-52 cleared, Bits 11-0 cleared)
+     */
     pml4_phys = cr3 & PTE_ADDR_MASK;
 
     seq_printf(m, "═══════════════════════════════════════════════════════════\n");
@@ -90,17 +156,6 @@ static int demo_entry_show(struct seq_file* m, void* v) {
         seq_printf(m, "  virt = 0x%lx\n", entry_virt);
         seq_printf(m, "  value = 0x%016lx\n", entry);
         seq_printf(m, "  present = %lu\n\n", entry & 1);
-    }
-
-    /* Kernel entries (256-260) */
-    seq_printf(m, "KERNEL SPACE ENTRIES:\n");
-    seq_printf(m, "────────────────────────────────────────────────────────\n");
-
-    for (i = 256; i < 261; i++) {
-        entry = read_entry(pml4_phys, i);
-        if (entry & 1) {
-            seq_printf(m, "PML4[%d] = 0x%016lx → next = 0x%lx\n", i, entry, entry & PTE_ADDR_MASK);
-        }
     }
 
     return 0;

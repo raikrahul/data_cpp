@@ -2,19 +2,67 @@
  * DEMO 17: BUDDY ALLOCATOR
  * ═════════════════════════
  *
- * Buddy = physical page allocator
+ * AXIOMATIC DIAGNOSIS (7 Ws)
+ * ──────────────────────────
  *
- * Allocates 2^order contiguous pages
- * order 0 = 1 page = 4 KB
- * order 1 = 2 pages = 8 KB
- * ...
- * order 10 = 1024 pages = 4 MB (typical max)
+ * 1. WHAT:
+ *    Input: Order `n` (Power of 2).
+ *    Action: Allocate contiguous block of 2^n pages.
+ *    Output: Pointer to first page.
  *
- * Splitting: if need 1 page but only 2-page block free,
- *            split into two 1-page buddies
+ *    Computation:
+ *    Order 0 = 2^0 = 1 Page  = 4 KB.
+ *    Order 1 = 2^1 = 2 Pages = 8 KB.
+ *    Order 9 = 2^9 = 512 Pages = 2 MB.
  *
- * Coalescing: when free, check if buddy also free,
- *             merge into larger block
+ * 2. WHY:
+ *    - External Fragmentation Solution.
+ *    - If we just allocated 1 page at random spots, we could never find
+ *      2 physically contiguous pages for a DMA buffer.
+ *    - Buddy system keeps free memory in defined power-of-2 blocks.
+ *
+ * 3. WHERE:
+ *    - Manages the entire `free_area` array in `struct zone`.
+ *
+ * 4. WHO:
+ *    - `alloc_pages()`, `get_free_pages()`.
+ *    - Underlying engine for Slab/Slub (which request Order-0 or Order-1 blocks).
+ *
+ * 5. WHEN:
+ *    - Process fork (allocate stack/heap).
+ *    - Device Driver initialization (Buffers).
+ *
+ * 6. WITHOUT:
+ *    - System RAM sets would become "Swiss Cheese".
+ *    - Total Free RAM = 1GB, but Max Contiguous Block = 4KB.
+ *    - Failed Allocations.
+ *
+ * 7. WHICH:
+ *    - Order 0 to MAX_ORDER (usually 11).
+ *
+ * ════════════════════════════════
+ * DISTINCT NUMERICAL PUZZLE
+ * ════════════════════════════════
+ * Scenario: Pizza Shop (The Buddy Logic)
+ * - Inventory: 1 Giant Pizza (Order 3).
+ *
+ * Customer A: Wants Order 0 (1 Slice).
+ * 1. Logic:
+ *    - Have Order 3. Split -> Two Order 2s.
+ *    - Have Order 2. Split -> Two Order 1s.
+ *    - Have Order 1. Split -> Two Order 0s.
+ *    - Serve one Order 0. Keep one Order 0 (Buddy).
+ *
+ * Customer B: Wants Order 0.
+ * - Serve the kept Buddy.
+ *
+ * Return:
+ * - A returns Slice. B returns Slice.
+ * - Logic:
+ *    - Are A and B buddies? Yes.
+ *    - Merge -> Order 1.
+ *    - Is Order 1 buddy free? Yes -> Merge -> Order 2...
+ *    - Result: Back to Giant Pizza.
  */
 
 #include <linux/gfp.h>

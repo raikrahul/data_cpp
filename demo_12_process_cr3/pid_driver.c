@@ -2,11 +2,64 @@
  * DEMO 12: READ TARGET PROCESS CR3
  * ═════════════════════════════════
  *
- * find_task_by_vpid(pid) → task_struct
- * task->mm->pgd → PML4 virtual address
- * virt_to_phys(pgd) → PML4 physical address
+ * AXIOMATIC DIAGNOSIS (7 Ws)
+ * ──────────────────────────
  *
- * SECURITY: Requires root or CAP_SYS_PTRACE
+ * 1. WHAT:
+ *    Input: Process ID (PID).
+ *    Action: Find `task_struct` -> `mm_struct` -> `pgd` (Page Global Dir).
+ *    Output: Physical Address of PML4 (CR3 value).
+ *
+ *    Computation:
+ *    CR3 = virt_to_phys(task->mm->pgd)
+ *
+ * 2. WHY:
+ *    - Memory Isolation.
+ *    - Process A CR3 != Process B CR3.
+ *    - When CPU runs A, CR3 points to A's Tables.
+ *    - A cannot see B's memory because A's tables don't map it.
+ *
+ * 3. WHERE:
+ *    - `task_struct`: Kernel memory (Slab).
+ *    - `pgd`: Allocated page in RAM.
+ *
+ * 4. WHO:
+ *    - Scheduler (`__switch_to`):
+ *    - Loads new CR3 when switching processes.
+ *    - Flushes non-global TLB entries (Demo 18).
+ *
+ * 5. WHEN:
+ *    - Context Switch (thousands of times per second).
+ *
+ * 6. WITHOUT:
+ *    - All processes share same page tables.
+ *    - One crash crashes everything.
+ *    - Security nightmare (A reads B's password).
+ *
+ * 7. WHICH:
+ *    - Which CR3? The one belonging to `current` or target PID.
+ *    - Kernel Threads (mm=NULL) use `mm_users/active_mm`.
+ *
+ * ════════════════════════════════
+ * DISTINCT NUMERICAL PUZZLE
+ * ════════════════════════════════
+ * Scenario: Apartment Complex Wi-Fi
+ * - Each Apartment (PID) has a Router (CR3).
+ * - Router Config (Page Table) maps "192.168.1.1" to specific dev.
+ *
+ * User A:
+ * - CR3 = Apt 101 Router.
+ * - "Connect Printer" -> Maps to Printer 101.
+ *
+ * User B:
+ * - CR3 = Apt 102 Router.
+ * - "Connect Printer" -> Maps to Printer 102.
+ *
+ * Numerical:
+ * - Virtual Addr = 192.168.1.5 (Same for both).
+ * - Physical Addr A = Device #55.
+ * - Physical Addr B = Device #99.
+ * - Context Switch = Unplugging Router A, plugging in Router B.
  */
 
 #include <asm/io.h>
@@ -35,13 +88,12 @@ static int demo_pid_show(struct seq_file* m, void* v) {
     seq_printf(m, "DEMO 12: PROCESS CR3 COMPARISON\n");
     seq_printf(m, "═══════════════════════════════════════════════════════════\n\n");
 
-    seq_printf(m, "CURRENT PROCESS (reading this /proc):\n");
+    seq_printf(m, "CURRENT PROCESS:\n");
     seq_printf(m, "  PID: %d\n", current->pid);
     seq_printf(m, "  COMM: %s\n", current->comm);
     seq_printf(m, "  CR3: 0x%lx\n", my_cr3);
     seq_printf(m, "  PML4_phys: 0x%lx\n\n", my_pml4);
 
-    /* List a few processes */
     seq_printf(m, "OTHER PROCESSES:\n");
     seq_printf(m, "────────────────────────────────────────────────────────\n");
 
@@ -57,10 +109,10 @@ static int demo_pid_show(struct seq_file* m, void* v) {
     }
     rcu_read_unlock();
 
-    seq_printf(m, "\nOBSERVATION:\n");
-    seq_printf(m, "  Different PIDs have different PML4 physical addresses\n");
-    seq_printf(m, "  Each process has its own page tables\n");
-    seq_printf(m, "  Kernel space (PML4[256:511]) is shared across all\n");
+    seq_printf(m, "\nOBSERVATION AXIOMS:\n");
+    seq_printf(m, "  1. CR3 determines validity of ANY virtual address.\n");
+    seq_printf(m, "  2. Two PIDs can use VA 0x1000 for different data.\n");
+    seq_printf(m, "  3. This is maintained by hardware pointers (CR3).\n");
 
     return 0;
 }

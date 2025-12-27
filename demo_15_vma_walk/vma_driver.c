@@ -2,15 +2,67 @@
  * DEMO 15: VMA WALK
  * ═════════════════
  *
- * Virtual Memory Area = contiguous range in process address space
+ * AXIOMATIC DIAGNOSIS (7 Ws)
+ * ──────────────────────────
  *
- * struct vm_area_struct:
- *   vm_start = start address
- *   vm_end = end address (exclusive)
- *   vm_flags = permissions (r/w/x)
- *   vm_file = backing file (if mmap'd)
+ * 1. WHAT:
+ *    Input: `mm_struct` of a Process.
+ *    Action: Walk the Linked List (or RB-Tree) of `vm_area_struct`s.
+ *    Output: List of Valid Virtual address ranges + Permissions.
  *
- * cat /proc/PID/maps shows VMAs
+ *    Computation:
+ *    [Start, End) intervals.
+ *    0x400000 - 0x401000: r-x (Code)
+ *    0x401000 - 0x402000: r-- (RotData)
+ *    0x402000 - 0x403000: rw- (Data)
+ *
+ * 2. WHY:
+ *    - Page Tables show "Mapping to RAM".
+ *    - VMAs show "Intent for usage".
+ *    - VMA says "This gap is valid stack space".
+ *    - Page Table says "It's not mapped yet (Page Fault needed)".
+ *
+ * 3. WHERE:
+ *    - Kernel Memory (likely Slab allocated `vm_area_struct`).
+ *    - Pointed to by `mm->mmap`.
+ *
+ * 4. WHO:
+ *    - `mmap()` syscall creates them.
+ *    - Page Fault Handler (`do_page_fault`) checks them.
+ *      - If Addr in VMA range? Valid fault (Allocate RAM).
+ *      - If Addr NOT in VMA range? Invalid fault (Segfault).
+ *
+ * 5. WHEN:
+ *    - Process startup (Execve load segments).
+ *    - `malloc` (brk/mmap).
+ *    - Dynamic Lib loading (.so).
+ *
+ * 6. WITHOUT:
+ *    - Kernel wouldn't know permissions (RX vs RW).
+ *    - Wouldn't know backing file (disk offset).
+ *    - Segfaults would be impossible to distinguish from valid demand paging.
+ *
+ * 7. WHICH:
+ *    - Whichever range contains the faulting address.
+ *    - Checked via `find_vma()`.
+ *
+ * ════════════════════════════════
+ * DISTINCT NUMERICAL PUZZLE
+ * ════════════════════════════════
+ * Scenario: Land Surveyor Claims
+ * - Desert (Virtual Space) is infinite.
+ * - Claims (VMAs) mark specific rectangles.
+ *
+ * Claim 1: "Plot A" (0 to 100 meters).
+ * - Usage: Cactus Farm (Read-Only).
+ *
+ * Claim 2: "Plot B" (200 to 300 meters).
+ * - Usage: Mine (Read-Write).
+ *
+ * Event:
+ * - Digging at meter 50? -> Police check Claim 1. "Farm only!" -> Arrest (Segfault).
+ * - Digging at meter 150? -> No Claim found. -> Arrest (Segfault).
+ * - Digging at meter 250? -> Claim 2 found. "Mine". -> Allowed (Resolve Fault).
  */
 
 #include <linux/mm.h>

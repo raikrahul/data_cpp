@@ -2,20 +2,64 @@
  * DEMO 19: COPY-ON-WRITE
  * ══════════════════════
  *
- * COW = optimization for fork()
+ * AXIOMATIC DIAGNOSIS (7 Ws)
+ * ──────────────────────────
  *
- * fork() creates child with same memory as parent
- * Without COW: copy all pages → slow, wastes RAM
- * With COW: share pages read-only, copy on write
+ * 1. WHAT:
+ *    Input: Process A forks Process B.
+ *    Action: Share Physical Pages. Mark Read-Only.
+ *    Output: A and B see same data. Memory usage = 1x (not 2x).
  *
- * MECHANISM:
- *   1. fork() marks all pages read-only in both parent and child
- *   2. Both processes share same physical pages
- *   3. On write: page fault → kernel allocates new page → copy → mark RW
+ *    Computation:
+ *    Parent: Virt 0x4000 -> Phys 0x9000 (R=1, W=0).
+ *    Child:  Virt 0x4000 -> Phys 0x9000 (R=1, W=0).
  *
- * PTE FLAGS:
- *   Before write: R=1, W=0
- *   After write:  R=1, W=1 (and page is now private copy)
+ * 2. WHY:
+ *    - Efficiency.
+ *    - `fork()` is often followed by `exec()`.
+ *    - If we copied 1GB of Parent RAM to Child, and Child immediately
+ *      replaced it with `exec()`, we wasted 1GB copy time.
+ *
+ * 3. WHERE:
+ *    - Page Table Entries (R/W bit = 0).
+ *    - `vm_area_struct` (VM_WRITE = 1).
+ *    - Mismatch (PTE=RO, VMA=RW) triggers Logic.
+ *
+ * 4. WHO:
+ *    - Page Fault Handler.
+ *    - Sees Write Fault on Read-Only page.
+ *    - Checks VMA: "Is this SUPPOSED to be writable?"
+ *    - Yes -> It's a COW page -> Copy it.
+ *
+ * 5. WHEN:
+ *    - `fork()`.
+ *    - `mmap()` private file mappings.
+ *
+ * 6. WITHOUT:
+ *    - Fork bombing would be trivial (OOM instantly).
+ *    - Chrome/Apache process creation would be 100x slower.
+ *
+ * 7. WHICH:
+ *    - Anonymous private pages.
+ *
+ * ════════════════════════════════
+ * DISTINCT NUMERICAL PUZZLE
+ * ════════════════════════════════
+ * Scenario: School Worksheet
+ * - Teacher has 1 Master Copy.
+ * - Class has 30 Students.
+ *
+ * Naive (No COW):
+ * - Teacher photocopies 30 times. (Slow, Wastes Paper).
+ * - Students read.
+ *
+ * COW:
+ * - Teacher projects Master Copy on board. (0 Paper).
+ * - Students read.
+ * - Student A wants to write an answer.
+ * - Student A copies text to their notebook (1 Page used).
+ * - Writes on notebook.
+ * - 29 Students still reading board.
  */
 
 #include <linux/mm.h>

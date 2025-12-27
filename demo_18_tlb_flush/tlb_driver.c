@@ -2,21 +2,67 @@
  * DEMO 18: TLB FLUSH
  * ══════════════════
  *
- * TLB = Translation Lookaside Buffer
- * Cache of recent VA → PA translations
+ * AXIOMATIC DIAGNOSIS (7 Ws)
+ * ──────────────────────────
  *
- * Without TLB: every memory access = 4 page table reads
- * With TLB: if hit, 0 page table reads
+ * 1. WHAT:
+ *    Input: Current Page Tables.
+ *    Action: Invalidate CPU Cache of Translations.
+ *    Output: Empty TLB (Misses guaranteed next time).
  *
- * TLB must be flushed when:
- *   1. CR3 changes (process switch) → automatic
- *   2. Page table entry modified → manual flush
- *   3. munmap / mprotect → kernel does this
+ *    Computation:
+ *    Write CR3 (Reload) -> Flushes all Non-Global entries.
+ *    `invlpg` -> Flushes 1 specific entry.
  *
- * YOUR CPU: AMD Ryzen 5 4600H
- *   L1 DTLB: 64 entries, 4KB pages
- *   L1 ITLB: 64 entries, 4KB pages
- *   L2 TLB: 2048 entries, 4KB/2MB
+ * 2. WHY:
+ *    - Coherency.
+ *    - OS changes a Page Table Entry (e.g., marks page Read-Only).
+ *    - CPU doesn't know. CPU still has "Read-Write" cached in TLB.
+ *    - User writes to page -> Security Violation!
+ *    - Solution: Flush TLB to force CPU to re-read PTE.
+ *
+ * 3. WHERE:
+ *    - L1 TLB (Instructions/Data) inside Core.
+ *    - L2 TLB (Shared) inside Core.
+ *
+ * 4. WHO:
+ *    - Kernel Memory Management (mprotect, munmap).
+ *    - Context Switcher.
+ *
+ * 5. WHEN:
+ *    - Changing mappings.
+ *    - Freeing memory.
+ *    - Switching processes (Automatic CR3 write).
+ *
+ * 6. WITHOUT:
+ *    - Stale Translations.
+ *    - Use-After-Free vulnerabilities (Accessing freed RAM).
+ *    - Correctness failure (COW doesn't trigger).
+ *
+ * 7. WHICH:
+ *    - Global Pages (Kernel) are preserved (Bit 8 in PTE).
+ *    - User Pages are flushed.
+ *
+ * ════════════════════════════════
+ * DISTINCT NUMERICAL PUZZLE
+ * ════════════════════════════════
+ * Scenario: Pizza Delivery Speed Dial
+ * - You order Pizza every Friday.
+ * - You save "Pizza Place" in Speed Dial (TLB).
+ * - Number: 555-0100.
+ *
+ * Event:
+ * - Pizza Place moves. New Number: 555-0200.
+ * - They update the Phone Book (Page Table).
+ *
+ * Failure:
+ * - You hit Speed Dial. Call 555-0100.
+ * - "Number Disconnected".
+ *
+ * Solution (Flush):
+ * - Delete Speed Dial entry.
+ * - Look up in Phone Book again.
+ * - Save 555-0200.
  */
 
 #include <asm/tlbflush.h>

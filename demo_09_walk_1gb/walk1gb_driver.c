@@ -2,15 +2,64 @@
  * DEMO 09: 1GB HUGE PAGE WALK
  * ═══════════════════════════
  *
- * Walk stops at PDPT level when PS=1
- * Offset = 30 bits instead of 12
+ * AXIOMATIC DIAGNOSIS (7 Ws)
+ * ──────────────────────────
  *
- * YOUR MACHINE:
- *   CPU flag pdpe1gb = present → supports 1GB pages
- *   But HugePages_Total = 0 → none pre-allocated
- *   To create: echo 1 > /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages
+ * 1. WHAT:
+ *    Input: PDPT Entry (Level 3)
+ *    Action: Check Bit 7 (PS) at Level 3
+ *    Output: 1GB Physical Page Base
  *
- * This demo reports if 1GB pages are found (unlikely on default config)
+ *    Computation:
+ *    Mask = 0x000FFFFFC0000000 (Bits 51-30)
+ *    Offset = VA[29:0] (30 bits)
+ *    2^30 bytes = 1,073,741,824 bytes = 1 Gigabyte.
+ *
+ * 2. WHY:
+ *    - To reduce TLB miss rate for Terabyte-scale workloads.
+ *    - 1 Entry covers 1GB.
+ *    - Entire 1TB RAM needs only 1024 Entries (1 PDPT + 1 PML4).
+ *    - Zero Page Table overhead (vs Gigabytes for 4KB pages).
+ *
+ * 3. WHERE:
+ *    - Level 3 (PDPT).
+ *    - Normally PDPT points to PD.
+ *    - IF PS=1, PDPT points to Physical RAM.
+ *
+ * 4. WHO:
+ *    - CPU: Must support `pdpe1gb` flag (check /proc/cpuinfo).
+ *    - Kernel: Must allocate contiguous 1GB blocks.
+ *
+ * 5. WHEN:
+ *    - HugeTLB usage (Database shared memory).
+ *    - Kernel Direct Map (if enabled/supported).
+ *
+ * 6. WITHOUT:
+ *    - Managing 1TB RAM with 4KB pages = 250,000,000 pages.
+ *    - Overhead logic is massive.
+ *
+ * 7. WHICH:
+ *    - Offset bits [29:0].
+ *    - Index 2 (PD) and Index 1 (PT) are skipped.
+ *
+ * ════════════════════════════════
+ * DISTINCT NUMERICAL PUZZLE
+ * ════════════════════════════════
+ * Scenario: Continent Zoning
+ * - Standard Map: Continent -> Country -> City -> Street.
+ * - 1GB "Page" is a Continent-wide Zone.
+ *
+ * Logic:
+ * - You arrive at "Continent Hub".
+ * - Ticket says "PS=1" (Grand Tour).
+ * - You ignore Country and City borders.
+ * - You use GPS coordinates relative to the CONTINENT start.
+ *
+ * Numerical:
+ * - Address: 1-999-999.
+ * - 1 = Continent ID.
+ * - 999-999 = Coordinates (Large number).
+ * - No need to look up Country ID or City ID.
  */
 
 #include <linux/module.h>

@@ -2,38 +2,72 @@
  * DEMO 07: FULL 4KB PAGE WALK
  * ═══════════════════════════
  *
- * Walk 4 levels: PML4 → PDPT → PD → PT → 4KB page
- * Each level: check present, if PS=0 continue, if PS=1 stop
+ * AXIOMATIC DIAGNOSIS (7 Ws)
+ * ──────────────────────────
  *
- * EXAMPLE: VA = 0x7FFE5E4ED123 (your process_a)
+ * 1. WHAT:
+ *    Input: Virtual Address (VA) = 0x7FFE5E4ED123
+ *    Process: 4-Level Descent (Tree Traversal)
+ *    Output: Physical Address (PA) + Page Content
  *
- * STEP 1: CR3 → PML4[255]
- *   CR3 = 0x1337A3000
- *   PML4_phys = 0x1337A3000
- *   index = 255
- *   entry_phys = 0x1337A3000 + 255×8 = 0x1337A37F8
- *   entry = read(0x1337A37F8) = 0xXXXXXXXXXXXX
+ *    Trace AXIOMS:
+ *    1. CR3 -> PML4 (Physical Base)
+ *    2. PML4[Index4] -> PDPT Base
+ *    3. PDPT[Index3] -> PD Base
+ *    4. PD[Index2] -> PT Base
+ *    5. PT[Index1] -> Page Base
+ *    6. Page Base + Offset -> Final PA
  *
- * STEP 2: PML4 entry → PDPT[511]
- *   PDPT_phys = entry & 0x000FFFFFFFFFF000
- *   index = 511
- *   entry = read(PDPT_phys + 511×8)
+ * 2. WHY:
+ *    - To translate sparse Virtual Space to dense Physical RAM.
+ *    - To provide isolation (Process A cannot walk Process B's tree).
+ *    - To allow paging to disk (Present bit).
  *
- * STEP 3: PDPT entry → PD[295]
- *   PD_phys = entry & 0x000FFFFFFFFFF000
- *   index = 295
- *   entry = read(PD_phys + 295×8)
- *   if (entry & 0x80) → 2MB huge, stop here
+ * 3. WHERE:
+ *    - Entirely in RAM. Accessing RAM to find where RAM is.
+ *    - Each step requires a memory read (expensive).
+ *    - Hence TLB (Demo 18) caches the result.
  *
- * STEP 4: PD entry → PT[237]
- *   PT_phys = entry & 0x000FFFFFFFFFF000
- *   index = 237
- *   entry = read(PT_phys + 237×8)
+ * 4. WHO:
+ *    - MMU (Hardware Page Walker).
+ *    - On "TLB Miss", MMU pauses CPU, walks tree, loads TLB, resumes.
  *
- * STEP 5: PT entry → final physical
- *   page_phys = entry & 0x000FFFFFFFFFF000
- *   offset = VA & 0xFFF = 0x123 = 291
- *   final_phys = page_phys | offset
+ * 5. WHEN:
+ *    - Every memory access not in TLB.
+ *    - Worst case latency = 4 DRAM reads (~100ns each) = 400ns penalty.
+ *
+ * 6. WITHOUT:
+ *    - Flat memory model (Segments?)
+ *    - Fragmentation.
+ *    - No memory protection.
+ *
+ * 7. WHICH:
+ *    - Which indices?
+ *    - VA broken into chunks of 9 bits.
+ *    - PML4 = bits[47:39]
+ *    - PDPT = bits[38:30]
+ *    - PD   = bits[29:21]
+ *    - PT   = bits[20:12]
+ *
+ * ════════════════════════════════
+ * DISTINCT NUMERICAL PUZZLE
+ * ════════════════════════════════
+ * Scenario: Interstellar Mail
+ * - Address: "Galaxy 5, System 2, Planet 9, House 40"
+ * - Digits: 5-2-9-40
+ *
+ * Routing:
+ * 1. Go to Universe Hub (CR3). Look up Galaxy 5.
+ *    -> Result: Coordinates of Galaxy 5 Main Post (PML4).
+ * 2. Go to Galaxy 5 Post. Look up System 2.
+ *    -> Result: Coordinates of System 2 Hub (PDPT).
+ * 3. Go to System 2 Hub. Look up Planet 9.
+ *    -> Result: Coordinates of Planet 9 Local Office (PD).
+ * 4. Go to Planet 9. Look up House 40.
+ *    -> Result: GPS Coordinates of House (PT).
+ *
+ * Delivery:
+ * - Drop package at Exact GPS Location (Physical Address).
  */
 
 #include <linux/module.h>

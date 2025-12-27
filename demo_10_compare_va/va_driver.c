@@ -2,21 +2,65 @@
  * DEMO 10: COMPARE __VA MACRO
  * ═══════════════════════════
  *
- * __va(phys) = page_offset_base + phys
+ * AXIOMATIC DIAGNOSIS (7 Ws)
+ * ──────────────────────────
  *
- * YOUR MACHINE:
- *   page_offset_base = 0xFFFF89DF00000000
+ * 1. WHAT:
+ *    Input: Physical Address (PA) e.g., 0x1234
+ *    Action: Add Kernel Offset `page_offset_base`
+ *    Output: Kernel Virtual Address (KVA)
  *
- * EXAMPLE 1: phys = 0x1337A3000
- *   manual = 0xFFFF89DF00000000 + 0x1337A3000
- *          = 0xFFFF89E0337A3000
- *   __va(0x1337A3000) = 0xFFFF89E0337A3000
- *   match ✓
+ *    Computation:
+ *    KVA = PA + page_offset_base
+ *    page_offset_base (on your machine) = 0xFFFF89DF00000000
+ *    e.g., __va(0) = 0xFFFF89DF00000000
  *
- * EXAMPLE 2: phys = 0
- *   manual = 0xFFFF89DF00000000 + 0 = 0xFFFF89DF00000000
- *   __va(0) = 0xFFFF89DF00000000
- *   match ✓
+ * 2. WHY:
+ *    - In 64-bit Long Mode, we cannot access physical RAM directly.
+ *    - We must go through the MMU (Paging).
+ *    - The Kernel maps ALL physical RAM to a specific virtual region.
+ *    - This is the "Direct Map" or "Physmap".
+ *
+ * 3. WHERE:
+ *    - Region starts at `page_offset_base`.
+ *    - Covers all RAM (16GB).
+ *
+ * 4. WHO:
+ *    - Kernel Boot Code (Head.S).
+ *    - Creates this mapping at PML4 index 273/275/variable (KASLR).
+ *
+ * 5. WHEN:
+ *    - Anytime kernel code needs to read a page table or physical frame.
+ *    - `phys_to_virt()` and `virt_to_phys()` use this simple addition.
+ *
+ * 6. WITHOUT:
+ *    - To read physical 0x1234, we would need to manually `ioremap` it.
+ *    - Extremely slow.
+ *
+ * 7. WHICH:
+ *    - Which Mapping? The "Direct Mapping".
+ *    - Not to be confused with "Highmem" (32-bit concept) or "vmalloc" (discontiguous).
+ *
+ * ════════════════════════════════
+ * DISTINCT NUMERICAL PUZZLE
+ * ════════════════════════════════
+ * Scenario: Parallel Universe
+ * - Universe A (Physical) starts at year 0.
+ * - Universe B (Virtual) starts at year 2000.
+ * - Time flows same in both.
+ *
+ * Conversion:
+ * - Event at Year 5 in Universe A = Year 2005 in Universe B.
+ * - Formula: B_Year = A_Year + 2000.
+ *
+ * Numerical:
+ * - A_Year = 100.
+ * - B_Year = 2100.
+ * - A_Year = 200.
+ * - B_Year = 2200.
+ *
+ * Key: The "Offset" (2000) is constant.
+ * KASLR: Sometimes the Offset is 3000, 4000... (Randomized at boot).
  */
 
 #include <linux/module.h>

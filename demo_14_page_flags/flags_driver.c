@@ -2,19 +2,62 @@
  * DEMO 14: PAGE FLAGS
  * ════════════════════
  *
- * struct page flags from kernel's memory management
+ * AXIOMATIC DIAGNOSIS (7 Ws)
+ * ──────────────────────────
  *
- * FLAGS BITS:
- *   PG_locked    - page is locked for I/O
- *   PG_referenced - page was accessed
- *   PG_uptodate  - page data is valid
- *   PG_dirty     - page has been modified
- *   PG_lru       - on LRU list
- *   PG_active    - on active LRU list
- *   PG_slab      - managed by slab allocator
- *   PG_reserved  - not available for allocation
- *   PG_compound  - part of compound page
- *   PG_hugetlb   - huge page
+ * 1. WHAT:
+ *    Input: struct page (Metadata for 1 Physical Frame).
+ *    Action: Read `flags` field.
+ *    Output: State of that 4KB chunk.
+ *
+ *    Bits:
+ *    - Locked, Error, Referenced, Uptodate, Dirty, LRU, Active, Slab.
+ *
+ * 2. WHY:
+ *    - RAM is just bytes. Kernel needs to trace *Lifecycle*.
+ *    - Is this page valid? (Uptodate)
+ *    - Has it been written to? (Dirty) -> Must write to disk before evicting.
+ *    - Is it being used? (Referenced/Active) -> Keep in RAM.
+ *    - Is it unused? (Inactive) -> Reclaim for other apps.
+ *
+ * 3. WHERE:
+ *    - `struct page` array (`mem_map`).
+ *    - Not in the page itself.
+ *    - 32GB RAM = ~8 million pages = ~512MB metadata array.
+ *
+ * 4. WHO:
+ *    - Page Reclaim Algorithm (LRU Scanner).
+ *    - Filesystem (Marks Uptodate/Dirty).
+ *
+ * 5. WHEN:
+ *    - Every time page is touched, allocated, or freed.
+ *
+ * 6. WITHOUT:
+ *    - Kernel wouldn't know which pages are junk and which are precious data.
+ *    - Would discard modified data (Data Loss).
+ *
+ * 7. WHICH:
+ *    - Which specific flags? A huge bitmap inside `unsigned long flags`.
+ *
+ * ════════════════════════════════
+ * DISTINCT NUMERICAL PUZZLE
+ * ════════════════════════════════
+ * Scenario: Library Book Stickers
+ * - Book Content = 4KB Data.
+ * - Cover = struct page.
+ *
+ * Stickers (Flags):
+ * - Red Dot: "Active" (Popular).
+ * - Blue Dot: "Dirty" (Scribbled notes, needs copying to archive).
+ * - Yellow Dot: "Locked" (Someone is currently reading it).
+ *
+ * Logic:
+ * - Librarian (Kernel) needs space for new books.
+ * - Scans shelf.
+ * - Finds Book A: Red Dot. Keep it.
+ * - Finds Book B: No Dot. Evict?
+ * - Check Blue Dot: Yes? Provide copy to Archive first (Writeback).
+ * - Check Yellow Dot: Yes? Can't touch it right now.
  */
 
 #include <linux/mm.h>
